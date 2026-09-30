@@ -1,0 +1,68 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  border: 1px solid transparent;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Status variants */
+.PROCESSING {
+  background-color: var(--status-processing-bg);
+  color: var(--status-processing-text);
+  border-color: var(--status-processing-border);
+}
+.PROCESSING .dot {
+  background-color: var(--status-processing-dot);
+  animation: pulseDot 1.5s infinite ease-in-out;
+}
+
+.ISSUE {
+  background-color: var(--status-issue-bg);
+  color: var(--status-issue-text);
+  border-color: var(--status-issue-border);
+}
+.ISSUE .dot {
+  background-color: var(--status-issue-dot);
+}
+
+.READY {
+  background-color: var(--status-ready-bg);
+  color: var(--status-ready-text);
+  border-color: var(--status-ready-border);
+}
+.READY .dot {
+  background-color: var(--status-ready-dot);
+}
+
+.SHIPPED {
+  background-color: var(--status-shipped-bg);
+  color: var(--status-shipped-text);
+  border-color: var(--status-shipped-border);
+}
+.SHIPPED .dot {
+  background-color: var(--status-shipped-dot);
+}
+
+@keyframes pulseDot {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

@@ -1,0 +1,81 @@
+.container {
+  background-color: var(--status-issue-bg);
+  border: 1px solid var(--status-issue-border);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.titleGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--status-issue-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.dismissBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--status-issue-text);
+  opacity: 0.7;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dismissBtn:hover {
+  opacity: 1;
+}
+
+.errorList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.errorItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--status-issue-text);
+}
+
+.crossIcon {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  color: var(--danger);
+}
+
+.errorContent {
+  display: flex;
+  flex-direction: column;
+}
+
+.fileName {
+  font-weight: 600;
+}
+
+.reason {
+  color: var(--text-secondary);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}

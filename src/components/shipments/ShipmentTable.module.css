@@ -1,0 +1,164 @@
+.tableContainer {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.th {
+  padding: 0.75rem 1rem;
+  background-color: var(--bg-subtle);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.thSortButton {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  text-transform: uppercase;
+  letter-spacing: inherit;
+  transition: color 0.15s ease;
+}
+
+.thSortButton:hover {
+  color: var(--text-primary);
+}
+
+.activeSortIcon {
+  color: var(--primary);
+}
+
+.mutedSortIcon {
+  color: var(--border-medium);
+  opacity: 0.6;
+}
+
+.td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.tr {
+  transition: background-color 0.1s ease;
+}
+
+.tr:hover {
+  background-color: var(--bg-subtle);
+}
+
+.customerBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.customerName {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.customerPhone {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.cellText {
+  color: var(--text-secondary);
+}
+
+.amountText {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.actionsCell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* Skeleton Loading styles */
+.skeletonRow .td {
+  padding: 1.125rem 1rem;
+}
+
+.skeletonLine {
+  height: 12px;
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--border-subtle) 50%, var(--bg-subtle) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+.skeletonSubline {
+  height: 9px;
+  margin-top: 5px;
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--border-subtle) 50%, var(--bg-subtle) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+.skeletonBadge {
+  height: 20px;
+  width: 65px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--border-subtle) 50%, var(--bg-subtle) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s infinite;
+}
+
+.skeletonButton {
+  height: 28px;
+  width: 72px;
+  border-radius: var(--radius-md);
+  margin-left: auto;
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--border-subtle) 50%, var(--bg-subtle) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s infinite;
+}
+
+@keyframes skeletonShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
