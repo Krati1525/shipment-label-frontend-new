@@ -14,7 +14,8 @@
   /* Borders */
   --border-subtle: #e2e8f0;
   --border-medium: #cbd5e1;
-  --border-focus: #2563eb;
+  --border-focus: var(--primary);
+  --primary-focus-ring: rgba(37, 99, 235, 0.16);
 
   /* Brand / Primary Accent */
   --primary: #2563eb;
@@ -54,6 +55,9 @@
   --danger-light: #fef2f2;
   --success: #16a34a;
   --warning: #d97706;
+  --warning-bg: #fffbeb;
+  --warning-border: #fde68a;
+  --warning-text: #92400e;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
@@ -73,6 +77,75 @@
   --header-height: 64px;
 }
 
+/* Dark Theme Tokens */
+[data-theme='dark'] {
+  /* Surface & Background (Deep obsidian & tailored slate) */
+  --bg-app: #0b0f19;
+  --bg-surface: #111827;
+  --bg-subtle: #1e293b;
+  --bg-muted: #334155;
+
+  /* Typography */
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-inverse: #0b0f19;
+
+  /* Borders */
+  --border-subtle: #1e293b;
+  --border-medium: #334155;
+  --border-focus: var(--primary);
+  --primary-focus-ring: rgba(59, 130, 246, 0.25);
+
+  /* Brand / Primary Accent */
+  --primary: #3b82f6;
+  --primary-hover: #60a5fa;
+  --primary-light: rgba(59, 130, 246, 0.16);
+  --primary-border: rgba(59, 130, 246, 0.35);
+  --primary-contrast: #ffffff;
+
+  /* Status Tokens */
+  /* PROCESSING */
+  --status-processing-text: #38bdf8;
+  --status-processing-bg: rgba(14, 165, 233, 0.14);
+  --status-processing-border: rgba(56, 189, 248, 0.28);
+  --status-processing-dot: #38bdf8;
+
+  /* ISSUE */
+  --status-issue-text: #f87171;
+  --status-issue-bg: rgba(239, 68, 68, 0.14);
+  --status-issue-border: rgba(248, 113, 113, 0.28);
+  --status-issue-dot: #ef4444;
+
+  /* READY */
+  --status-ready-text: #4ade80;
+  --status-ready-bg: rgba(34, 197, 94, 0.14);
+  --status-ready-border: rgba(74, 222, 128, 0.28);
+  --status-ready-dot: #22c55e;
+
+  /* SHIPPED */
+  --status-shipped-text: #94a3b8;
+  --status-shipped-bg: rgba(148, 163, 184, 0.12);
+  --status-shipped-border: rgba(148, 163, 184, 0.24);
+  --status-shipped-dot: #94a3b8;
+
+  /* Semantic Alerts */
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-light: rgba(239, 68, 68, 0.16);
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --warning-bg: rgba(245, 158, 11, 0.14);
+  --warning-border: rgba(245, 158, 11, 0.3);
+  --warning-text: #fbbf24;
+
+  /* Shadows (Tailored deep contrast for dark mode) */
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
+}
+
 /* Base Resets */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -88,6 +161,7 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 button, input, select, textarea {
@@ -122,7 +196,7 @@ img {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-subtle);
+  background: var(--bg-app);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border-medium);

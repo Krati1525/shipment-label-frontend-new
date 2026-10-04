@@ -1,4 +1,4 @@
-export type ShipmentStatus = 'PROCESSING' | 'ISSUE' | 'READY' | 'SHIPPED';
+export type ShipmentStatus = 'PROCESSING' | 'PAUSED' | 'ISSUE' | 'READY' | 'SHIPPED';
 
 export interface ShipmentIssue {
   field: string;
@@ -106,6 +106,7 @@ export type ProcessingStage =
   | 'WAITING'
   | 'OCR'
   | 'EXTRACTION'
+  | 'PAUSED'
   | 'COMPLETE'
   | 'ERROR';
 

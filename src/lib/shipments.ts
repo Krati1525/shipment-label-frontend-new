@@ -72,7 +72,7 @@ export async function getShipments(
     if (params.search && params.search.trim()) {
       cleanParams.search = params.search.trim();
     }
-    if (params.status && params.status !== 'ALL') {
+    if (params.status) {
       cleanParams.status = params.status;
     }
     if (params.courier && params.courier.trim()) {
@@ -224,7 +224,7 @@ export function getExportUrl(params?: ShipmentFilterParams): string {
     if (params.search && params.search.trim()) {
       searchParams.append('search', params.search.trim());
     }
-    if (params.status && params.status !== 'ALL') {
+    if (params.status) {
       searchParams.append('status', params.status);
     }
     if (params.courier && params.courier.trim()) {
@@ -338,3 +338,126 @@ export async function getDashboardData(signal?: AbortSignal): Promise<DashboardD
   };
 }
 
+
+/**
+ * Delete a specific shipment by ID
+ */
+export async function deleteShipment(id: string): Promise<{ success: boolean; message: string; id: string }> {
+  return apiClient.delete<{ success: boolean; message: string; id: string }>(`/shipments/${id}`);
+}
+
+/**
+ * Batch delete shipments by IDs
+ */
+export async function deleteBatchShipments(shipmentIds: string[]): Promise<{ success: boolean; message: string; count: number; deletedIds: string[] }> {
+  return apiClient.delete<{ success: boolean; message: string; count: number; deletedIds: string[] }>(
+    '/shipments/batch',
+    { shipmentIds }
+  );
+}
+
+/**
+ * Pause a processing shipment
+ */
+export async function pauseShipment(id: string): Promise<{ success: boolean; message: string; shipment: Shipment }> {
+  return apiClient.post<{ success: boolean; message: string; shipment: Shipment }>(`/shipments/${id}/pause`);
+}
+
+/**
+ * Resume a paused shipment
+ */
+export async function resumeShipment(id: string): Promise<{ success: boolean; message: string; shipment: Shipment }> {
+  return apiClient.post<{ success: boolean; message: string; shipment: Shipment }>(`/shipments/${id}/resume`);
+}
+
+/**
+ * Batch pause shipments
+ */
+export async function pauseBatch(shipmentIds: string[]): Promise<{ success: boolean; message: string; count: number; pausedIds: string[] }> {
+  return apiClient.post<{ success: boolean; message: string; count: number; pausedIds: string[] }>('/shipments/pause', { shipmentIds });
+}
+
+/**
+ * Batch resume shipments
+ */
+export async function resumeBatch(shipmentIds: string[]): Promise<{ success: boolean; message: string; count: number; resumedIds: string[] }> {
+  return apiClient.post<{ success: boolean; message: string; count: number; resumedIds: string[] }>('/shipments/resume', { shipmentIds });
+}
+
+/**
+ * Update any shipment field directly (Edit functionality)
+ */
+export async function updateShipment(
+  id: string,
+  data: Partial<Shipment>
+): Promise<Shipment> {
+  return apiClient.patch<Shipment>(`/shipments/${id}`, data);
+}
+
+/**
+ * Manual OCR re-scan and entity extraction for a specific shipment
+ */
+export async function reScanShipment(
+  id: string,
+  rotation?: number
+): Promise<Shipment> {
+  return apiClient.post<Shipment>(`/shipments/${id}/re-ocr`, { rotation });
+}
+
+/**
+ * Direct SMS dispatch with configurable Sender Number
+ */
+export async function sendSms(payload: {
+  shipmentId?: string;
+  fromNumber: string;
+  toNumber: string;
+  message: string;
+}): Promise<{
+  success: boolean;
+  message: string;
+  dispatchTime: string;
+  fromNumber: string;
+  toNumber: string;
+  messageContent: string;
+}> {
+  return apiClient.post('/shipments/sms', payload);
+}
+
+/**
+ * Bulk SMS dispatch to multiple selected shipments
+ */
+export async function sendBulkSms(payload: {
+  shipmentIds: string[];
+  fromNumber: string;
+  customMessage?: string;
+}): Promise<{
+  success: boolean;
+  totalCount: number;
+  sentCount: number;
+  results: any[];
+}> {
+  return apiClient.post('/shipments/bulk-sms', payload);
+}
+
+/**
+ * Bulk WhatsApp dispatch preparation
+ */
+export async function prepareBulkWhatsApp(payload: {
+  shipmentIds: string[];
+  customMessage?: string;
+}): Promise<{
+  success: boolean;
+  totalCount: number;
+  validPhoneCount: number;
+  items: Array<{
+    shipmentId: string;
+    recipientName: string;
+    mobileNumber: string;
+    cleanMobile: string | null;
+    message: string;
+    whatsappUrl: string | null;
+    hasValidPhone: boolean;
+  }>;
+}> {
+  return apiClient.post('/shipments/bulk-whatsapp', payload);
+}

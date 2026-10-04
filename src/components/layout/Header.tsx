@@ -3,7 +3,8 @@
 import React from 'react';
 import { usePathname } from 'next/navigation';
 import styles from './Header.module.css';
-import { Menu, Search, ShieldCheck } from 'lucide-react';
+import { Menu, ShieldCheck } from 'lucide-react';
+import { ThemeToggle, ThemeColorPicker } from '@/components/theme';
 
 export interface HeaderProps {
   onToggleMobileMenu?: () => void;
@@ -57,20 +58,9 @@ export function Header({ onToggleMobileMenu }: HeaderProps) {
         </div>
       </div>
 
-      <div className={styles.centerSection}>
-        <div className={styles.searchBox}>
-          <Search size={16} aria-hidden="true" />
-          <input
-            type="text"
-            className={styles.searchInput}
-            placeholder="Global search (AWB, mobile, name)..."
-            readOnly
-            title="Use the Shipments page search for active querying"
-          />
-        </div>
-      </div>
-
       <div className={styles.rightSection}>
+        <ThemeColorPicker />
+        <ThemeToggle showLabel variant="pill" />
         <div className={styles.operatorBadge}>
           <ShieldCheck size={14} className={styles.operatorDot} />
           <span>Operator Console</span>

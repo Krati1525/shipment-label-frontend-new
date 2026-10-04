@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   Clock,
   ArrowRight,
+  Pause,
 } from 'lucide-react';
 import { ProcessingShipmentItem } from '@/types/shipment';
 import { getFullImageUrl } from '@/lib/utils';
@@ -36,6 +37,7 @@ export function ProcessingShipmentList({ items }: ProcessingShipmentListProps) {
         const isExtract = item.stage === 'EXTRACTION';
         const isError = item.stage === 'ERROR';
         const isWaiting = item.stage === 'WAITING';
+        const isPaused = item.stage === 'PAUSED' || item.status === 'PAUSED';
 
         return (
           <div key={item.shipmentId} className={styles.itemCard}>
@@ -72,6 +74,14 @@ export function ProcessingShipmentList({ items }: ProcessingShipmentListProps) {
                   <div className={styles.stageRow}>
                     <Clock size={16} color="var(--text-muted)" />
                     <span>Waiting in processing queue...</span>
+                  </div>
+                )}
+
+                {/* PAUSED State */}
+                {isPaused && (
+                  <div className={styles.stageRow} style={{ color: '#d97706' }}>
+                    <Pause size={16} />
+                    <span>Pipeline paused for this shipment</span>
                   </div>
                 )}
 

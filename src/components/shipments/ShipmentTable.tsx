@@ -3,9 +3,9 @@ import styles from './ShipmentTable.module.css';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Eye, ArrowUp, ArrowDown, ArrowUpDown, PackageOpen } from 'lucide-react';
+import { Eye, Trash2, Edit2, MessageSquare, MessageCircle, ArrowUp, ArrowDown, ArrowUpDown, PackageOpen } from 'lucide-react';
 import { Shipment } from '@/types/shipment';
-import { formatCurrency, formatPhone, formatWeight, cn } from '@/lib/utils';
+import { formatCurrency, formatPhone, formatWeight } from '@/lib/utils';
 
 export interface ShipmentTableProps {
   shipments: Shipment[];
@@ -16,6 +16,13 @@ export interface ShipmentTableProps {
   onSortChange?: (field: string) => void;
   onResetFilters?: () => void;
   isFiltered?: boolean;
+  onDeleteShipment?: (shipment: Shipment) => void;
+  onEditShipment?: (shipment: Shipment) => void;
+  onOpenSms?: (shipment: Shipment) => void;
+  onOpenWhatsApp?: (shipment: Shipment) => void;
+  selectedIds?: string[];
+  onToggleSelect?: (id: string) => void;
+  onToggleSelectAll?: () => void;
 }
 
 export function ShipmentTable({
@@ -27,8 +34,18 @@ export function ShipmentTable({
   onSortChange,
   onResetFilters,
   isFiltered = false,
+  onDeleteShipment,
+  onEditShipment,
+  onOpenSms,
+  onOpenWhatsApp,
+  selectedIds = [],
+  onToggleSelect,
+  onToggleSelectAll,
 }: ShipmentTableProps) {
-
+  const allSelected =
+    shipments.length > 0 && shipments.every((s) => selectedIds.includes(s.id));
+  const someSelected =
+    shipments.some((s) => selectedIds.includes(s.id)) && !allSelected;
 
   const renderSortIndicator = (field: string) => {
     if (sortBy === field) {
@@ -71,6 +88,20 @@ export function ShipmentTable({
         <table className={styles.table}>
           <thead>
             <tr>
+              {onToggleSelectAll && (
+                <th className={styles.checkboxTh}>
+                  <input
+                    type="checkbox"
+                    className={styles.checkboxInput}
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected;
+                    }}
+                    onChange={onToggleSelectAll}
+                    aria-label="Select all visible shipments"
+                  />
+                </th>
+              )}
               <th className={styles.th}>
                 <button
                   type="button"
@@ -169,6 +200,11 @@ export function ShipmentTable({
               // Loading Skeleton Rows
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={`skeleton-${i}`} className={styles.skeletonRow}>
+                  {onToggleSelectAll && (
+                    <td className={styles.checkboxTd}>
+                      <div className={styles.skeletonLine} style={{ width: '16px', height: '16px' }} />
+                    </td>
+                  )}
                   <td className={styles.td}>
                     <div className={styles.skeletonLine} style={{ width: '120px' }} />
                     <div className={styles.skeletonSubline} style={{ width: '80px' }} />
@@ -201,12 +237,30 @@ export function ShipmentTable({
               ))
             ) : (
               shipments.map((shipment) => {
+                const isSelected = selectedIds.includes(shipment.id);
                 const location = [shipment.city, shipment.state]
                   .filter(Boolean)
                   .join(', ');
+                const isReady = String(shipment.status || '').trim().toUpperCase() === 'READY';
 
                 return (
-                  <tr key={shipment.id} className={styles.tr}>
+                  <tr
+                    key={shipment.id}
+                    className={`${styles.tr} ${isSelected ? styles.rowSelected : ''}`}
+                  >
+                    {/* Checkbox */}
+                    {onToggleSelect && (
+                      <td className={styles.checkboxTd}>
+                        <input
+                          type="checkbox"
+                          className={styles.checkboxInput}
+                          checked={isSelected}
+                          onChange={() => onToggleSelect(shipment.id)}
+                          aria-label={`Select shipment ${shipment.id}`}
+                        />
+                      </td>
+                    )}
+
                     {/* Customer */}
                     <td className={styles.td}>
                       <div className={styles.customerBlock}>
@@ -272,9 +326,68 @@ export function ShipmentTable({
                           size="sm"
                           onClick={() => onSelectShipment(shipment)}
                           leftIcon={<Eye size={14} />}
+                          title="View Details"
                         >
                           Details
                         </Button>
+                        {onEditShipment && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditShipment(shipment);
+                            }}
+                            leftIcon={<Edit2 size={13} color="var(--primary)" />}
+                            title="Edit shipment data"
+                            aria-label={`Edit shipment ${shipment.id}`}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                        
+                        {onOpenWhatsApp && isReady && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenWhatsApp(shipment);
+                            }}
+                            title="Send WhatsApp Notification"
+                            aria-label={`Send WhatsApp to ${shipment.mobileNumber || 'recipient'}`}
+                          >
+                            <MessageCircle size={14} color="#16a34a" />
+                          </Button>
+                        )}
+                        {onOpenSms && isReady && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenSms(shipment);
+                            }}
+                            title="Send Direct SMS"
+                            aria-label={`Send SMS to ${shipment.mobileNumber || 'recipient'}`}
+                          >
+                            <MessageSquare size={14} color="var(--text-secondary)" />
+                          </Button>
+                        )}
+                        {onDeleteShipment && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteShipment(shipment);
+                            }}
+                            title="Delete shipment"
+                            aria-label={`Delete shipment ${shipment.id}`}
+                          >
+                            <Trash2 size={14} color="var(--status-issue-text)" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

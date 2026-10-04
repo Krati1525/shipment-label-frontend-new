@@ -27,7 +27,7 @@
   width: 2.25rem;
   height: 2.25rem;
   border-radius: var(--radius-full);
-  background-color: #ffffff;
+  background-color: var(--bg-surface);
   color: var(--status-ready-text);
   display: flex;
   align-items: center;

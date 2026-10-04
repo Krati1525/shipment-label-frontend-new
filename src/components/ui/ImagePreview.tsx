@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styles from './ImagePreview.module.css';
-import { ZoomIn, ZoomOut, RotateCcw, Maximize2, X, ImageOff } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Maximize2, X, ImageOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ImagePreviewProps {
@@ -17,6 +17,8 @@ export function ImagePreview({
   maxHeight = '420px',
 }: ImagePreviewProps) {
   const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(Boolean(src));
   const [isError, setIsError] = useState(false);
@@ -77,6 +79,16 @@ export function ImagePreview({
       <button
         type="button"
         className={styles.toolButton}
+        onClick={handleRotate}
+        title="Rotate 90°"
+        aria-label="Rotate 90 degrees"
+      >
+        <RotateCw size={14} />
+        <span>Rotate</span>
+      </button>
+      <button
+        type="button"
+        className={styles.toolButton}
         onClick={handleZoomIn}
         disabled={zoom >= 3}
         title="Zoom In"
@@ -117,7 +129,7 @@ export function ImagePreview({
           <div
             className={styles.imageWrapper}
             style={{
-              transform: `scale(${zoom})`,
+              transform: `scale(${zoom}) rotate(${rotation}deg)`,
               display: isLoading ? 'none' : 'flex',
             }}
           >
@@ -159,7 +171,7 @@ export function ImagePreview({
             <div
               className={styles.imageWrapper}
               style={{
-                transform: `scale(${zoom})`,
+                transform: `scale(${zoom}) rotate(${rotation}deg)`,
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}

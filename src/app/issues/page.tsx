@@ -11,10 +11,10 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Button } from '@/components/ui/Button';
-import { CheckCircle2, RefreshCw, Package, Info } from 'lucide-react';
+import { CheckCircle2, RefreshCw, Package, Info, ScanLine } from 'lucide-react';
 import { Shipment } from '@/types/shipment';
 import { ShipmentCorrectionPayload } from '@/types/api';
-import { getIssues, resolveShipment } from '@/lib/shipments';
+import { getIssues, resolveShipment, reScanShipment } from '@/lib/shipments';
 
 interface ToastState {
   type: 'success' | 'error' | 'warning' | 'info';
@@ -30,6 +30,7 @@ function IssuesContent() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isReScanning, setIsReScanning] = useState<boolean>(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   // Fetch real issues from backend
@@ -42,7 +43,6 @@ function IssuesContent() {
       setIssuesList(items);
 
       if (items.length > 0) {
-        // Prioritize: 1) explicit preserve, 2) URL query param, 3) current selection, 4) first item
         const targetId = preserveSelectedId || urlShipmentId;
         const exists = items.some((item) => item.id === targetId);
 
@@ -71,9 +71,40 @@ function IssuesContent() {
     fetchIssues();
   }, [fetchIssues]);
 
-  // Currently active shipment
   const selectedShipment =
     issuesList.find((item) => item.id === selectedIssueId) || null;
+
+  // Manual OCR detection handler
+  const handleReScan = async (rotationAngle?: number) => {
+    if (isReScanning || !selectedShipment) return;
+    setIsReScanning(true);
+    try {
+      const updated = await reScanShipment(selectedShipment.id, rotationAngle);
+      setToast({
+        type: 'success',
+        message: 'Manual OCR re-scan completed! Extracted latest values.',
+      });
+
+      if (updated.status === 'READY') {
+        const remaining = issuesList.filter((s) => s.id !== updated.id);
+        setIssuesList(remaining);
+        if (remaining.length > 0) {
+          setSelectedIssueId(remaining[0].id);
+        } else {
+          setSelectedIssueId(null);
+        }
+      } else {
+        setIssuesList((prev) =>
+          prev.map((s) => (s.id === updated.id ? updated : s))
+        );
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Manual OCR detection failed.';
+      setToast({ type: 'error', message: msg });
+    } finally {
+      setIsReScanning(false);
+    }
+  };
 
   // Handle Save & Resolve submission
   const handleSaveAndResolve = async (payload: ShipmentCorrectionPayload) => {
@@ -83,51 +114,25 @@ function IssuesContent() {
     try {
       const updatedShipment = await resolveShipment(selectedShipment.id, payload);
 
-      // Backend status is the authoritative source of truth
-      if (updatedShipment.status === 'READY') {
-        setToast({
-          type: 'success',
-          message: `Shipment ${updatedShipment.awbNumber || updatedShipment.id.slice(0, 8)} resolved successfully.`,
-        });
+      setToast({
+        type: 'success',
+        message: `Shipment ${updatedShipment.awbNumber || updatedShipment.id.slice(0, 8)} resolved successfully.`,
+      });
 
-        // Remove resolved shipment from the pending issues queue
-        const remainingIssues = issuesList.filter(
-          (item) => item.id !== updatedShipment.id
+      const remainingIssues = issuesList.filter(
+        (item) => item.id !== updatedShipment.id
+      );
+      setIssuesList(remainingIssues);
+
+      if (remainingIssues.length > 0) {
+        const currentIndex = issuesList.findIndex(
+          (item) => item.id === updatedShipment.id
         );
-        setIssuesList(remainingIssues);
-
-        if (remainingIssues.length > 0) {
-          // Select next available issue
-          const currentIndex = issuesList.findIndex(
-            (item) => item.id === updatedShipment.id
-          );
-          const nextIndex =
-            currentIndex < remainingIssues.length ? currentIndex : 0;
-          setSelectedIssueId(remainingIssues[nextIndex].id);
-        } else {
-          setSelectedIssueId(null);
-        }
-      } else if (updatedShipment.status === 'ISSUE') {
-        // Shipment still has discrepancies according to backend validation
-        setToast({
-          type: 'warning',
-          message:
-            'Shipment still needs review. Please correct the remaining issues.',
-        });
-
-        // Update active shipment in queue with latest backend state
-        setIssuesList((prev) =>
-          prev.map((item) =>
-            item.id === updatedShipment.id ? updatedShipment : item
-          )
-        );
+        const nextIndex =
+          currentIndex < remainingIssues.length ? currentIndex : 0;
+        setSelectedIssueId(remainingIssues[nextIndex].id);
       } else {
-        // Any other backend status (e.g. PROCESSING, SHIPPED)
-        setIssuesList((prev) =>
-          prev.map((item) =>
-            item.id === updatedShipment.id ? updatedShipment : item
-          )
-        );
+        setSelectedIssueId(null);
       }
     } catch (err: unknown) {
       const msg =
@@ -150,16 +155,29 @@ function IssuesContent() {
         <div className={styles.titleArea}>
           <h1 className={styles.title}>Issues Review Workspace</h1>
           <p className={styles.subtitle}>
-            Review OCR-flagged shipment labels, correct invalid or missing fields, and submit for backend verification.
+            Review OCR-flagged shipment labels, correct fields, trigger manual OCR detection, and submit.
           </p>
         </div>
 
         <div className={styles.headerActions}>
+          {selectedShipment && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => handleReScan()}
+              disabled={isReScanning || isLoading}
+              isLoading={isReScanning}
+              leftIcon={<ScanLine size={14} />}
+            >
+              {isReScanning ? 'Scanning...' : 'Manual OCR Detection'}
+            </Button>
+          )}
+
           <Button
             variant="secondary"
             size="sm"
             onClick={() => fetchIssues(selectedIssueId)}
-            disabled={isLoading || isSaving}
+            disabled={isLoading || isSaving || isReScanning}
             leftIcon={
               <RefreshCw
                 size={14}
@@ -226,15 +244,13 @@ function IssuesContent() {
       {/* State 4: Issues Workspace */}
       {!isLoading && !error && issuesList.length > 0 && (
         <>
-          {/* Operator Notice */}
           <div className={styles.notice} role="note">
             <Info size={16} />
             <span>
-              Left panel displays the original high-resolution label scan with zoom/fullscreen; right panel provides real-time field corrections validated by the backend.
+              Left panel displays the original high-resolution label scan with zoom/fullscreen; right panel provides real-time field corrections and manual OCR re-scan.
             </span>
           </div>
 
-          {/* Pending Issues Queue List */}
           <div className={styles.queueCard}>
             <div className={styles.queueHeader}>
               <div className={styles.queueTitleGroup}>
@@ -254,12 +270,13 @@ function IssuesContent() {
             />
           </div>
 
-          {/* 2-Column Review Panel */}
           {selectedShipment && (
             <IssueReviewPanel
               shipment={selectedShipment}
               onSaveAndResolve={handleSaveAndResolve}
               isSaving={isSaving}
+              onReScan={handleReScan}
+              isReScanning={isReScanning}
             />
           )}
         </>

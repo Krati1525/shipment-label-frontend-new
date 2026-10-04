@@ -46,7 +46,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.625rem 1rem;
-  background-color: #f8fafc;
+  background-color: var(--bg-subtle);
   border: 1px dashed var(--border-medium);
   border-radius: var(--radius-md);
   font-size: 0.8125rem;

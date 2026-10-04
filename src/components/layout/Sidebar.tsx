@@ -12,6 +12,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ThemeToggle } from '@/components/theme';
 
 interface NavItem {
   label: string;
@@ -82,9 +83,12 @@ export function Sidebar({ isOpenOnMobile = false, onCloseMobile }: SidebarProps)
         </nav>
 
         <div className={styles.footer}>
-          <div className={styles.footerStatus}>
-            <span className={styles.pulseDot} />
-            <span>Backend Online</span>
+          <div className={styles.footerRow}>
+            <div className={styles.footerStatus}>
+              <span className={styles.pulseDot} />
+              <span>Backend Online</span>
+            </div>
+            <ThemeToggle variant="icon" />
           </div>
           <span className={styles.footerVersion}>Logistics Operations v1.0</span>
         </div>

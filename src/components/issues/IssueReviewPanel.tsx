@@ -3,22 +3,27 @@ import styles from './IssueReviewPanel.module.css';
 import { ImagePreview } from '@/components/ui/ImagePreview';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Button } from '@/components/ui/Button';
 import { ShipmentCorrectionForm } from './ShipmentCorrectionForm';
 import { Shipment } from '@/types/shipment';
 import { ShipmentCorrectionPayload } from '@/types/api';
 import { getFullImageUrl } from '@/lib/utils';
-import { AlertTriangle, Hash, FileText } from 'lucide-react';
+import { AlertTriangle, Hash, FileText, ScanLine } from 'lucide-react';
 
 export interface IssueReviewPanelProps {
   shipment: Shipment;
   onSaveAndResolve?: (payload: ShipmentCorrectionPayload) => void;
   isSaving?: boolean;
+  onReScan?: (rotationAngle?: number) => void;
+  isReScanning?: boolean;
 }
 
 export function IssueReviewPanel({
   shipment,
   onSaveAndResolve,
   isSaving = false,
+  onReScan,
+  isReScanning = false,
 }: IssueReviewPanelProps) {
   const fullImageUrl = getFullImageUrl(shipment.imageUrl);
 
@@ -68,11 +73,24 @@ export function IssueReviewPanel({
                 )}
               </div>
             </div>
+
+            {/* {onReScan && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => onReScan()}
+                disabled={isReScanning || isSaving}
+                isLoading={isReScanning}
+                leftIcon={<ScanLine size={14} />}
+              >
+                {isReScanning ? 'Scanning...' : 'Manual OCR Re-scan'}
+              </Button>
+            )} */}
           </div>
 
           <CardHeader
             title="Correct Extracted Fields"
-            subtitle="Fix missing or low-confidence data and submit for backend verification"
+            subtitle="All fields are optional. Verify or correct fields and click Save & Resolve."
           />
           <CardBody>
             <ShipmentCorrectionForm
@@ -80,6 +98,8 @@ export function IssueReviewPanel({
               shipment={shipment}
               onSaveAndResolve={onSaveAndResolve}
               isSaving={isSaving}
+              onReScan={onReScan}
+              isReScanning={isReScanning}
             />
           </CardBody>
         </Card>

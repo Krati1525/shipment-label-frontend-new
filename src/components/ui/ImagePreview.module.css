@@ -53,8 +53,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f1f5f9;
-  background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+  background-color: var(--bg-subtle);
+  background-image: radial-gradient(var(--border-medium) 1px, transparent 1px);
   background-size: 16px 16px;
 }
 

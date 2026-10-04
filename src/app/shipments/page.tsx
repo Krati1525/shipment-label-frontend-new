@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import styles from './page.module.css';
 import { ShipmentSearch } from '@/components/shipments/ShipmentSearch';
@@ -8,14 +8,26 @@ import { ShipmentFilters } from '@/components/shipments/ShipmentFilters';
 import { ShipmentTable } from '@/components/shipments/ShipmentTable';
 import { Pagination } from '@/components/shipments/Pagination';
 import { ShipmentDetailsDrawer } from '@/components/shipments/ShipmentDetailsDrawer';
+import { EditShipmentModal } from '@/components/shipments/EditShipmentModal';
+import { SmsModal } from '@/components/shipments/SmsModal';
+import { WhatsAppModal } from '@/components/shipments/WhatsAppModal';
+import { DeleteConfirmationModal } from '@/components/shipments/DeleteConfirmationModal';
 import { Toast } from '@/components/ui/Toast';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { ErrorState } from '@/components/ui/ErrorState';
-import { CheckCheck, RefreshCw, AlertCircle } from 'lucide-react';
+import { CheckCheck, RefreshCw, Trash2, MessageSquare, MessageCircle, Send, X } from 'lucide-react';
 import { Shipment, Pagination as PaginationType, ShipmentStatus } from '@/types/shipment';
 import { ShipmentFilterParams } from '@/types/api';
-import { getShipments, exportShipments, downloadBlob, markShipmentShipped } from '@/lib/shipments';
+import {
+  getShipments,
+  exportShipments,
+  downloadBlob,
+  markShipmentShipped,
+  deleteShipment,
+  deleteBatchShipments,
+  updateShipment,
+} from '@/lib/shipments';
 
 interface ToastState {
   type: 'success' | 'error' | 'warning' | 'info';
@@ -24,7 +36,7 @@ interface ToastState {
 
 const DEFAULT_FILTERS: ShipmentFilterParams = {
   search: '',
-  status: 'READY', // Authoritative backend default
+  status: 'ALL',
   courier: '',
   city: '',
   state: '',
@@ -51,6 +63,28 @@ function ShipmentsContent() {
   const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
+  // Bulk selection state
+  const [selectedShipmentIds, setSelectedShipmentIds] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+
+  // Delete confirmation modal state
+  const [shipmentToDelete, setShipmentToDelete] = useState<Shipment | null>(null);
+  const [isDeletingSingle, setIsDeletingSingle] = useState(false);
+
+  // Edit shipment modal state
+  const [editingShipment, setEditingShipment] = useState<Shipment | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // SMS Modal state (single and bulk)
+  const [smsShipment, setSmsShipment] = useState<Shipment | null>(null);
+  const [isBulkSmsOpen, setIsBulkSmsOpen] = useState(false);
+
+  // WhatsApp Modal state (single and bulk)
+  const [whatsAppShipment, setWhatsAppShipment] = useState<Shipment | null>(null);
+  const [isBulkWhatsAppOpen, setIsBulkWhatsAppOpen] = useState(false);
+  const [drawerRefreshTrigger, setDrawerRefreshTrigger] = useState(0);
+
   // Sync with URL query parameters (?status=... and ?id=...) on mount or URL change
   useEffect(() => {
     const statusParam = searchParams.get('status');
@@ -58,7 +92,7 @@ function ShipmentsContent() {
 
     if (statusParam) {
       const upper = statusParam.toUpperCase();
-      if (['PROCESSING', 'ISSUE', 'READY', 'SHIPPED', 'ALL'].includes(upper)) {
+      if (['PROCESSING', 'PAUSED', 'ISSUE', 'READY', 'SHIPPED', 'ALL'].includes(upper)) {
         setFilters((prev) => {
           if (prev.status === upper) return prev;
           return {
@@ -86,7 +120,6 @@ function ShipmentsContent() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  // Request sequence ID to prevent race conditions on rapid search/filter typing
   const latestRequestIdRef = useRef(0);
 
   // Fetch real shipments from backend
@@ -98,7 +131,6 @@ function ShipmentsContent() {
     try {
       const response = await getShipments(currentFilters);
 
-      // Discard stale responses if a newer request was dispatched
       if (requestId !== latestRequestIdRef.current) {
         return;
       }
@@ -129,7 +161,6 @@ function ShipmentsContent() {
     }
   }, []);
 
-  // Trigger fetch whenever filters change
   useEffect(() => {
     fetchShipments(filters);
   }, [filters, fetchShipments]);
@@ -142,7 +173,7 @@ function ShipmentsContent() {
         return {
           ...prev,
           search: searchInput,
-          page: 1, // Reset to page 1 on new search query
+          page: 1,
         };
       });
     }, 400);
@@ -150,7 +181,6 @@ function ShipmentsContent() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Search handlers
   const handleSearchChange = (val: string) => {
     setSearchInput(val);
   };
@@ -160,7 +190,6 @@ function ShipmentsContent() {
     setFilters((prev) => ({ ...prev, search: '', page: 1 }));
   };
 
-  // Filter change handlers
   const handleFilterChange = (
     key: keyof ShipmentFilterParams,
     value: string | number | boolean | undefined
@@ -168,7 +197,7 @@ function ShipmentsContent() {
     setFilters((prev) => ({
       ...prev,
       [key]: value,
-      page: 1, // Reset page on filter changes
+      page: 1,
     }));
   };
 
@@ -179,13 +208,13 @@ function ShipmentsContent() {
   const handleResetFilters = () => {
     setSearchInput('');
     setFilters(DEFAULT_FILTERS);
+    setSelectedShipmentIds([]);
     setToast({
       type: 'info',
       message: 'Filters reset to default view (Ready shipments).',
     });
   };
 
-  // Server-side column sorting
   const handleSortChange = (field: string) => {
     setFilters((prev) => {
       if (prev.sortBy === field) {
@@ -206,7 +235,6 @@ function ShipmentsContent() {
     });
   };
 
-  // Server-side pagination
   const handlePageChange = (newPage: number) => {
     setFilters((prev) => ({
       ...prev,
@@ -215,7 +243,6 @@ function ShipmentsContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Export Excel matching current filters
   const handleExportExcel = async () => {
     if (isExporting) return;
     setIsExporting(true);
@@ -227,26 +254,146 @@ function ShipmentsContent() {
         message: 'Excel spreadsheet downloaded successfully.',
       });
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Unable to export shipments. Please try again.';
-      setToast({
-        type: 'error',
-        message: msg,
-      });
+      const msg = err instanceof Error ? err.message : 'Unable to export shipments. Please try again.';
+      setToast({ type: 'error', message: msg });
     } finally {
       setIsExporting(false);
     }
   };
 
-  // Drawer handlers
+  // Checkbox toggle handlers
+  const handleToggleSelect = (id: string) => {
+    setSelectedShipmentIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (shipments.length === 0) return;
+    const allSelected = shipments.every((s) => selectedShipmentIds.includes(s.id));
+    if (allSelected) {
+      setSelectedShipmentIds([]);
+    } else {
+      const allIds = shipments.map((s) => s.id);
+      setSelectedShipmentIds(allIds);
+    }
+  };
+
+  // Bulk Delete Operations
+  const handleRequestBulkDelete = () => {
+    if (selectedShipmentIds.length === 0) return;
+    setIsBulkDeleteOpen(true);
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedShipmentIds.length === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      const res = await deleteBatchShipments(selectedShipmentIds);
+      setToast({
+        type: 'success',
+        message: `Successfully deleted ${res.count} shipment(s).`,
+      });
+      setSelectedShipmentIds([]);
+      setIsBulkDeleteOpen(false);
+      fetchShipments(filters);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Bulk delete failed.';
+      setToast({ type: 'error', message: msg });
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const handleBulkWhatsApp = () => {
+    if (readySelectedCount === 0) {
+      setToast({
+        type: 'warning',
+        message: 'None of the selected shipments have status READY for WhatsApp dispatch.',
+      });
+      return;
+    }
+    setIsBulkWhatsAppOpen(true);
+  };
+
+  const handleOpenWhatsApp = (shipment: Shipment) => {
+    if (String(shipment.status || '').trim().toUpperCase() !== 'READY') return;
+    setWhatsAppShipment(shipment);
+  };
+
+  // Single Row Handlers
+  const handleDeleteShipment = (shipment: Shipment) => {
+    setShipmentToDelete(shipment);
+  };
+
+  const handleConfirmSingleDelete = async () => {
+    if (!shipmentToDelete) return;
+    const label = shipmentToDelete.name || shipmentToDelete.awbNumber || shipmentToDelete.id.slice(0, 8);
+    setIsDeletingSingle(true);
+    try {
+      await deleteShipment(shipmentToDelete.id);
+      setToast({ type: 'success', message: `Shipment "${label}" deleted successfully.` });
+      setShipments((prev) => prev.filter((s) => s.id !== shipmentToDelete.id));
+      setSelectedShipmentIds((prev) => prev.filter((id) => id !== shipmentToDelete.id));
+      if (selectedShipmentId === shipmentToDelete.id) {
+        setSelectedShipmentId(null);
+        setIsDrawerOpen(false);
+      }
+      setShipmentToDelete(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete shipment.';
+      setToast({ type: 'error', message: msg });
+    } finally {
+      setIsDeletingSingle(false);
+    }
+  };
+
+  const handleEditShipment = (shipment: Shipment) => {
+    setEditingShipment(shipment);
+  };
+
+  const handleSaveEdit = async (id: string, updatedData: Partial<Shipment>) => {
+    setIsSavingEdit(true);
+    try {
+      const updated = await updateShipment(id, updatedData);
+      setToast({
+        type: 'success',
+        message: `Shipment ${updated.awbNumber || updated.id.slice(0, 8)} updated successfully.`,
+      });
+      setShipments((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...updated } : s))
+      );
+      setDrawerRefreshTrigger((prev) => prev + 1);
+      setEditingShipment(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update shipment.';
+      setToast({ type: 'error', message: msg });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleBulkSms = () => {
+    if (readySelectedCount === 0) {
+      setToast({
+        type: 'warning',
+        message: 'None of the selected shipments have status READY for SMS dispatch.',
+      });
+      return;
+    }
+    setIsBulkSmsOpen(true);
+  };
+
+  const handleOpenSms = (shipment: Shipment) => {
+    if (String(shipment.status || '').trim().toUpperCase() !== 'READY') return;
+    setSmsShipment(shipment);
+  };
+
   const handleSelectShipment = (shipment: Shipment) => {
     setSelectedShipmentId(shipment.id);
     setIsDrawerOpen(true);
   };
 
-  // Handle Mark as Shipped confirmation
   const handleRequestMarkShipped = (shipment: Shipment) => {
     setShipmentToShip(shipment);
   };
@@ -256,25 +403,15 @@ function ShipmentsContent() {
     setIsShipping(true);
     try {
       const updated = await markShipmentShipped(shipmentToShip.id);
-
       setToast({
         type: 'success',
         message: `Shipment ${updated.awbNumber || updated.id.slice(0, 8)} marked as SHIPPED.`,
       });
-
       setShipmentToShip(null);
-
-      // Refresh table to reflect authoritative status change
       fetchShipments(filters);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Unable to mark shipment as shipped. Please try again.';
-      setToast({
-        type: 'error',
-        message: msg,
-      });
+      const msg = err instanceof Error ? err.message : 'Unable to mark shipment as shipped.';
+      setToast({ type: 'error', message: msg });
     } finally {
       setIsShipping(false);
     }
@@ -289,6 +426,19 @@ function ShipmentsContent() {
     Boolean(filters.fromDate) ||
     Boolean(filters.toDate);
 
+  const selectedShipmentsList = useMemo(
+    () => shipments.filter((s) => selectedShipmentIds.includes(s.id)),
+    [shipments, selectedShipmentIds]
+  );
+  const readySelectedShipments = useMemo(
+    () =>
+      selectedShipmentsList.filter(
+        (s) => String(s.status || '').trim().toUpperCase() === 'READY'
+      ),
+    [selectedShipmentsList]
+  );
+  const readySelectedCount = readySelectedShipments.length;
+
   return (
     <div className={styles.page}>
       {/* Header */}
@@ -296,7 +446,7 @@ function ShipmentsContent() {
         <div className={styles.titleArea}>
           <h1 className={styles.title}>Shipments Management</h1>
           <p className={styles.subtitle}>
-            Search, filter, track status, notify recipients via WhatsApp/SMS, and dispatch deliveries.
+            Search, filter, track status, notify recipients via Direct SMS/WhatsApp, and edit or dispatch shipments.
           </p>
         </div>
 
@@ -345,6 +495,69 @@ function ShipmentsContent() {
         isLoading={isLoading}
       />
 
+      {/* Bulk Action Toolbar */}
+      {selectedShipmentIds.length > 0 && (
+        <div className={styles.bulkBar}>
+          <div className={styles.bulkInfo}>
+            <span className={styles.bulkBadge}>{selectedShipmentIds.length}</span>
+            <span>shipment(s) selected</span>
+            {readySelectedCount > 0 && (
+              <span className={styles.bulkReadyBadge}>
+                {readySelectedCount} Ready
+              </span>
+            )}
+          </div>
+
+          <div className={styles.bulkActions}>
+            {/* Show Bulk WhatsApp only for READY status */}
+            {readySelectedCount > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleBulkWhatsApp}
+                leftIcon={<MessageCircle size={14} color="#16a34a" />}
+                title={`Send WhatsApp to ${readySelectedCount} Ready shipment(s)`}
+              >
+                Bulk WhatsApp ({readySelectedCount})
+              </Button>
+            )}
+
+            {/* Show Bulk SMS only for READY status */}
+            {readySelectedCount > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleBulkSms}
+                leftIcon={<MessageSquare size={14} color="#2563eb" />}
+                title={`Send SMS to ${readySelectedCount} Ready shipment(s)`}
+              >
+                Bulk SMS ({readySelectedCount})
+              </Button>
+            )}
+
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleRequestBulkDelete}
+              isLoading={isBulkDeleting}
+              disabled={isBulkDeleting}
+              leftIcon={<Trash2 size={14} />}
+            >
+              Bulk Delete ({selectedShipmentIds.length})
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedShipmentIds([])}
+              leftIcon={<X size={14} />}
+            >
+              Deselect All
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Error State */}
       {error ? (
         <ErrorState
@@ -358,6 +571,13 @@ function ShipmentsContent() {
           <ShipmentTable
             shipments={shipments}
             onSelectShipment={handleSelectShipment}
+            onDeleteShipment={handleDeleteShipment}
+            onEditShipment={handleEditShipment}
+            onOpenSms={handleOpenSms}
+            onOpenWhatsApp={handleOpenWhatsApp}
+            selectedIds={selectedShipmentIds}
+            onToggleSelect={handleToggleSelect}
+            onToggleSelectAll={handleToggleSelectAll}
             isLoading={isLoading}
             sortBy={filters.sortBy}
             sortOrder={filters.sortOrder}
@@ -385,6 +605,75 @@ function ShipmentsContent() {
           setSelectedShipmentId(null);
         }}
         onRequestMarkShipped={handleRequestMarkShipped}
+        onDeleteShipment={handleDeleteShipment}
+        onEditShipment={handleEditShipment}
+        refreshTrigger={drawerRefreshTrigger}
+      />
+
+      {/* Edit Shipment Modal */}
+      <EditShipmentModal
+        shipment={editingShipment}
+        isOpen={Boolean(editingShipment)}
+        onClose={() => setEditingShipment(null)}
+        onSave={handleSaveEdit}
+        isSaving={isSavingEdit}
+      />
+
+      {/* Single Direct SMS Modal */}
+      <SmsModal
+        isOpen={Boolean(smsShipment)}
+        onClose={() => setSmsShipment(null)}
+        shipment={smsShipment}
+        onSuccess={(msg) => setToast({ type: 'success', message: msg })}
+      />
+
+      {/* Bulk SMS Modal */}
+      <SmsModal
+        isOpen={isBulkSmsOpen}
+        onClose={() => setIsBulkSmsOpen(false)}
+        shipments={isBulkSmsOpen ? readySelectedShipments : []}
+        onSuccess={(msg) => {
+          setToast({ type: 'success', message: msg });
+          setSelectedShipmentIds([]);
+        }}
+      />
+
+      {/* Single WhatsApp Modal */}
+      <WhatsAppModal
+        isOpen={Boolean(whatsAppShipment)}
+        onClose={() => setWhatsAppShipment(null)}
+        shipment={whatsAppShipment}
+        onSuccess={(msg) => setToast({ type: 'success', message: msg })}
+      />
+
+      {/* Bulk WhatsApp Modal */}
+      <WhatsAppModal
+        isOpen={isBulkWhatsAppOpen}
+        onClose={() => setIsBulkWhatsAppOpen(false)}
+        shipments={isBulkWhatsAppOpen ? readySelectedShipments : []}
+        onSuccess={(msg) => {
+          setToast({ type: 'success', message: msg });
+          setSelectedShipmentIds([]);
+        }}
+      />
+
+      {/* Single Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={Boolean(shipmentToDelete)}
+        onClose={() => !isDeletingSingle && setShipmentToDelete(null)}
+        onConfirm={handleConfirmSingleDelete}
+        isLoading={isDeletingSingle}
+        shipment={shipmentToDelete}
+      />
+
+      {/* Bulk Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={isBulkDeleteOpen}
+        onClose={() => !isBulkDeleting && setIsBulkDeleteOpen(false)}
+        onConfirm={handleConfirmBulkDelete}
+        isLoading={isBulkDeleting}
+        shipments={selectedShipmentsList}
+        totalCount={selectedShipmentIds.length}
       />
 
       {/* Mark as Shipped Confirmation Modal */}

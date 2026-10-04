@@ -21,9 +21,10 @@ export interface ShipmentFiltersProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: 'READY', label: 'Ready (Default)' },
-  { value: 'ALL', label: 'All Statuses' },
+  { value: 'ALL', label: 'All Statuses (Default)' },
+  { value: 'READY', label: 'Ready' },
   { value: 'PROCESSING', label: 'Processing' },
+  { value: 'PAUSED', label: 'Paused' },
   { value: 'ISSUE', label: 'Issue' },
   { value: 'SHIPPED', label: 'Shipped' },
 ];
@@ -53,12 +54,11 @@ export function ShipmentFilters({
       <div className={styles.filterGrid}>
         <Select
           label="Status"
-          value={filters.status || 'READY'}
+          value={filters.status || 'ALL'}
           onChange={(e) =>
             onChange('status', e.target.value as ShipmentStatus | 'ALL')
           }
           options={STATUS_OPTIONS}
-          disabled={isLoading}
         />
 
         <Select

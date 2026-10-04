@@ -1,3 +1,4 @@
+import { SmsModal } from './SmsModal';
 import React, { useState, useEffect, useCallback } from 'react';
 import styles from './ShipmentDetailsDrawer.module.css';
 import { Drawer } from '@/components/ui/Drawer';
@@ -15,6 +16,9 @@ import {
   Clock,
   ExternalLink,
   RotateCcw,
+  Play,
+  Trash2,
+  Edit2,
 } from 'lucide-react';
 import { Shipment } from '@/types/shipment';
 import { formatCurrency, formatPhone, formatDateTime, formatWeight, getFullImageUrl } from '@/lib/utils';
@@ -27,6 +31,9 @@ export interface ShipmentDetailsDrawerProps {
   onClose: () => void;
   onRequestMarkShipped?: (shipment: Shipment) => void;
   onShipmentUpdated?: (updatedShipment: Shipment) => void;
+  onDeleteShipment?: (shipment: Shipment) => void;
+  onEditShipment?: (shipment: Shipment) => void;
+  refreshTrigger?: number;
 }
 
 export function ShipmentDetailsDrawer({
@@ -35,11 +42,15 @@ export function ShipmentDetailsDrawer({
   onClose,
   onRequestMarkShipped,
   onShipmentUpdated,
+  onDeleteShipment,
+  onEditShipment,
+  refreshTrigger,
 }: ShipmentDetailsDrawerProps) {
   const [shipment, setShipment] = useState<Shipment | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isNotifying, setIsNotifying] = useState<boolean>(false);
+  const [isSmsOpen, setIsSmsOpen] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
   const fetchDetails = useCallback(async (id: string) => {
@@ -69,7 +80,7 @@ export function ShipmentDetailsDrawer({
       setError(null);
       setToast(null);
     }
-  }, [isOpen, shipmentId, fetchDetails]);
+  }, [isOpen, shipmentId, fetchDetails, refreshTrigger]);
 
   // WhatsApp notification launcher
   const handleWhatsApp = async () => {
@@ -97,7 +108,10 @@ export function ShipmentDetailsDrawer({
   };
 
   // SMS notification launcher
-  const handleSms = async () => {
+  const handleSms = () => {
+    setIsSmsOpen(true);
+  };
+  const handleOldSms = async () => {
     if (!shipment || isNotifying) return;
     setIsNotifying(true);
     try {
@@ -130,9 +144,22 @@ export function ShipmentDetailsDrawer({
       isOpen={isOpen}
       onClose={onClose}
       title={
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span>Shipment Details</span>
-          {shipment && <StatusBadge status={shipment.status} />}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span>Shipment Details</span>
+            {shipment && <StatusBadge status={shipment.status} />}
+          </div>
+          {shipment && onEditShipment && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onEditShipment(shipment)}
+              leftIcon={<Edit2 size={14} color="var(--primary)" />}
+              title="Edit Shipment Details"
+            >
+              Edit
+            </Button>
+          )}
         </div>
       }
       subtitle={
@@ -146,14 +173,14 @@ export function ShipmentDetailsDrawer({
         shipment && (
           <div className={styles.actionBar}>
             {/* READY Status: WhatsApp, SMS, and Mark as Shipped */}
-            {shipment.status === 'READY' && (
+            {String(shipment.status || '').trim().toUpperCase() === 'READY' && (
               <div className={styles.actionRow}>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleWhatsApp}
                   disabled={isNotifying}
-                  leftIcon={<MessageSquare size={15} color="#16a34a" />}
+                  leftIcon={<MessageSquare size={15} color="var(--success)" />}
                 >
                   WhatsApp
                 </Button>
@@ -162,7 +189,7 @@ export function ShipmentDetailsDrawer({
                   size="sm"
                   onClick={handleSms}
                   disabled={isNotifying}
-                  leftIcon={<Smartphone size={15} color="#2563eb" />}
+                  leftIcon={<Smartphone size={15} color="var(--primary)" />}
                 >
                   SMS
                 </Button>
@@ -207,6 +234,21 @@ export function ShipmentDetailsDrawer({
               </div>
             )}
 
+            {/* PAUSED Status: Resume or View Pipeline */}
+            {shipment.status === 'PAUSED' && (
+              <div className={styles.actionRow}>
+                <Link href={`/processing?ids=${shipment.id}`} onClick={onClose}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<Play size={15} />}
+                  >
+                    Resume / View Pipeline
+                  </Button>
+                </Link>
+              </div>
+            )}
+
             {/* SHIPPED Status: Read-only completed state */}
             {shipment.status === 'SHIPPED' && (
               <div
@@ -216,6 +258,30 @@ export function ShipmentDetailsDrawer({
                 <span>This order has been completed and marked as Shipped.</span>
               </div>
             )}
+
+            {/* Edit & Delete Shipment Actions */}
+            <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
+              {onEditShipment ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onEditShipment(shipment)}
+                  leftIcon={<Edit2 size={14} color="var(--primary)" />}
+                >
+                  Edit Details
+                </Button>
+              ) : <div />}
+              {onDeleteShipment && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDeleteShipment(shipment)}
+                  leftIcon={<Trash2 size={15} color="var(--status-issue-text)" />}
+                >
+                  Delete Shipment
+                </Button>
+              )}
+            </div>
           </div>
         )
       }
@@ -361,6 +427,12 @@ export function ShipmentDetailsDrawer({
           )}
         </div>
       )}
+      <SmsModal
+        isOpen={isSmsOpen}
+        onClose={() => setIsSmsOpen(false)}
+        shipment={shipment}
+        onSuccess={(msg) => setToast({ type: 'success', message: msg })}
+      />
     </Drawer>
   );
 }

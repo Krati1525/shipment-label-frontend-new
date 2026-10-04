@@ -16,8 +16,10 @@ import {
   CheckCircle2,
   XCircle,
   UploadCloud,
+  Pause,
+  Play,
 } from 'lucide-react';
-import { runBatchOcr, extractBatch, getShipment } from '@/lib/shipments';
+import { runBatchOcr, extractBatch, getShipment, pauseBatch, resumeBatch } from '@/lib/shipments';
 import { ProcessingShipmentItem } from '@/types/shipment';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -36,6 +38,50 @@ function ProcessingContent() {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [currentStageMessage, setCurrentStageMessage] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const isPausedRef = useRef<boolean>(false);
+
+  const handlePause = async () => {
+    setIsPaused(true);
+    isPausedRef.current = true;
+    setCurrentStageMessage('Processing paused by user.');
+    const pendingIds = items
+      .filter((i) => i.stage !== 'COMPLETE' && i.stage !== 'ERROR')
+      .map((i) => i.shipmentId);
+
+    setItems((prev) =>
+      prev.map((item) =>
+        pendingIds.includes(item.shipmentId)
+          ? { ...item, status: 'PAUSED', stage: 'PAUSED' }
+          : item
+      )
+    );
+
+    if (pendingIds.length > 0) {
+      try {
+        await pauseBatch(pendingIds);
+      } catch (e) {
+        console.warn('Pause batch failed:', e);
+      }
+    }
+  };
+
+  const handleResume = async () => {
+    setIsPaused(false);
+    isPausedRef.current = false;
+    setCurrentStageMessage('Resuming processing pipeline...');
+    const pendingIds = items
+      .filter((i) => i.stage !== 'COMPLETE' && i.stage !== 'ERROR')
+      .map((i) => i.shipmentId);
+    if (pendingIds.length > 0) {
+      try {
+        await resumeBatch(pendingIds);
+        executePipeline(pendingIds);
+      } catch (e) {
+        console.warn('Resume batch failed:', e);
+      }
+    }
+  };
 
   // Prevent duplicate execution on initial mount or re-renders
   const hasStartedRef = useRef<boolean>(false);
@@ -137,6 +183,10 @@ function ProcessingContent() {
       const ocrResponse = await runBatchOcr(idsToProcess);
       const results = ocrResponse.results || [];
 
+      ocrSucceededIds = results
+        .filter((r) => r.success !== false)
+        .map((r) => r.shipmentId);
+
       // Update each item with OCR result
       setItems((prev) =>
         prev.map((item) => {
@@ -151,7 +201,6 @@ function ProcessingContent() {
             };
           }
 
-          ocrSucceededIds.push(item.shipmentId);
           return {
             ...item,
             rawOcrText: res.rawOcrText,
@@ -180,6 +229,12 @@ function ProcessingContent() {
     if (ocrSucceededIds.length === 0) {
       setIsProcessing(false);
       setCurrentStageMessage('OCR failed for all requested labels.');
+      return;
+    }
+
+    if (isPausedRef.current) {
+      setCurrentStageMessage('Processing paused by user.');
+      setIsProcessing(false);
       return;
     }
 
@@ -327,8 +382,19 @@ function ProcessingContent() {
         <div className={styles.pipelineBanner} role="status" aria-live="polite">
           <div className={styles.pipelineSpinner} />
           <div className={styles.pipelineText}>
-            <span className={styles.pipelineTitle}>Pipeline Active</span>
+            <span className={styles.pipelineTitle}>{isPaused ? 'Pipeline Paused' : 'Pipeline Active'}</span>
             <span className={styles.pipelineSubtitle}>{currentStageMessage}</span>
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', zIndex: 5 }}>
+            {isPaused ? (
+              <Button variant="primary" size="sm" onClick={handleResume} leftIcon={<Play size={14} />}>
+                Resume
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" onClick={handlePause} leftIcon={<Pause size={14} />}>
+                Pause
+              </Button>
+            )}
           </div>
         </div>
       )}

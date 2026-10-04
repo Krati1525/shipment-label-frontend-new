@@ -27,8 +27,8 @@
 
 .active {
   border-color: var(--status-issue-border);
-  background-color: #fff9f5;
-  box-shadow: 0 0 0 2px rgba(224, 86, 36, 0.2);
+  background-color: var(--status-issue-bg);
+  box-shadow: 0 0 0 2px var(--status-issue-border);
 }
 
 .thumbnailWrapper {

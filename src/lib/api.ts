@@ -128,8 +128,12 @@ export const apiClient = {
       headers,
     }),
 
-  delete: <T>(endpoint: string, headers?: HeadersInit) =>
-    request<T>(endpoint, { method: 'DELETE', headers }),
+  delete: <T>(endpoint: string, body?: unknown, headers?: HeadersInit) =>
+    request<T>(endpoint, {
+      method: 'DELETE',
+      body: body !== undefined ? (body instanceof FormData ? body : JSON.stringify(body)) : undefined,
+      headers,
+    }),
 
   getBaseUrl: () => API_BASE_URL,
 };

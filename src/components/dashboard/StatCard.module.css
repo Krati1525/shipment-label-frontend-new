@@ -52,7 +52,7 @@
 
 /* Themes */
 .total {
-  background-color: #eff6ff;
+  background-color: var(--primary-light);
   color: var(--primary);
 }
 
@@ -96,7 +96,7 @@
   display: inline-block;
   width: 3.5rem;
   height: 1.875rem;
-  background: linear-gradient(90deg, var(--bg-subtle) 25%, #e2e8f0 50%, var(--bg-subtle) 75%);
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--bg-muted) 50%, var(--bg-subtle) 75%);
   background-size: 200% 100%;
   border-radius: var(--radius-sm);
   animation: shimmer 1.5s infinite;
