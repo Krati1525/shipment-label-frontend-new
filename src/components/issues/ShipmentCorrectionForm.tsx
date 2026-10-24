@@ -29,7 +29,8 @@ export function ShipmentCorrectionForm({
     city: shipment.city ?? '',
     state: shipment.state ?? '',
     pincode: shipment.pincode ?? '',
-    awbNumber: shipment.awbNumber ?? '',
+    awbNumber: (shipment.trackingId ?? shipment.awbNumber ?? ''),
+    trackingId: (shipment.trackingId ?? shipment.awbNumber ?? ''),
     courierPartnerName: shipment.courierPartnerName ?? '',
     weight:
       shipment.weight !== null && shipment.weight !== undefined
@@ -42,23 +43,17 @@ export function ShipmentCorrectionForm({
   });
 
   // Extract issue message for a specific field directly from backend data
-  // All fields are optional: "Missing" on optional fields does not show as a blocking validation error
   const getFieldIssue = (fieldName: string): string | undefined => {
     if (!shipment.issues) return undefined;
-    let message: string | undefined;
     if (Array.isArray(shipment.issues)) {
       const match = (shipment.issues as ShipmentIssue[]).find(
         (iss) => iss.field.toLowerCase() === fieldName.toLowerCase()
       );
-      message = match ? match.message : undefined;
+      return match ? match.message : undefined;
     } else if (typeof shipment.issues === 'object') {
-      message = (shipment.issues as Record<string, string>)[fieldName];
+      return (shipment.issues as Record<string, string>)[fieldName];
     }
-
-    if (message === 'Missing') {
-      return undefined;
-    }
-    return message;
+    return undefined;
   };
 
   const handleChange = (field: keyof ShipmentCorrectionPayload, value: string) => {
@@ -72,13 +67,13 @@ export function ShipmentCorrectionForm({
   };
 
   const rawIssues = shipment.issues;
-  // Filter out pure "Missing" notices so optional fields don't alarm user
-  const issuesList = rawIssues
+  const issuesList: ShipmentIssue[] = rawIssues
     ? Array.isArray(rawIssues)
-      ? (rawIssues as ShipmentIssue[]).filter((iss) => iss.message !== 'Missing')
-      : Object.entries(rawIssues as Record<string, string>).filter(
-          ([, v]) => v !== 'Missing'
-        )
+      ? (rawIssues as ShipmentIssue[])
+      : Object.entries(rawIssues as Record<string, string>).map(([field, message]) => ({
+          field,
+          message,
+        }))
     : [];
 
   const hasGenuineIssues = issuesList.length > 0;
@@ -92,25 +87,22 @@ export function ShipmentCorrectionForm({
             <AlertTriangle size={18} />
             <span>Label Discrepancies ({issuesList.length})</span>
           </div>
+          <p style={{ margin: '0.25rem 0 0.5rem 0', fontSize: '0.8125rem', opacity: 0.9 }}>
+            Information not visible on the label scan may be left blank. Click &quot;Save &amp; Resolve&quot; to clear issues and mark this shipment Ready.
+          </p>
           <ul className={styles.issueList}>
-            {Array.isArray(rawIssues)
-              ? (issuesList as ShipmentIssue[]).map((iss, i) => (
-                  <li key={i}>
-                    <strong>{iss.field}</strong>: {iss.message}
-                  </li>
-                ))
-              : (issuesList as [string, string][]).map(([k, v], i) => (
-                  <li key={i}>
-                    <strong>{k}</strong>: {v}
-                  </li>
-                ))}
+            {issuesList.map((iss, i) => (
+              <li key={i}>
+                <strong>{iss.field}</strong>: {iss.message}
+              </li>
+            ))}
           </ul>
         </div>
       )}
 
       {/* Recipient Information */}
       <div className={styles.sectionHeader}>
-        <span>Consignee Details (All Fields Optional)</span>
+        <span>Consignee Details</span>
       </div>
 
       <div className={styles.row2}>
@@ -176,11 +168,14 @@ export function ShipmentCorrectionForm({
 
       <div className={styles.row2}>
         <Input
-          label="AWB Number"
-          value={formData.awbNumber || ''}
-          onChange={(e) => handleChange('awbNumber', e.target.value)}
-          placeholder="e.g. 224800004269"
-          error={getFieldIssue('awbNumber')}
+          label="Tracking ID / AWB Number"
+          value={formData.trackingId || formData.awbNumber || ''}
+          onChange={(e) => {
+            handleChange('awbNumber', e.target.value);
+            handleChange('trackingId', e.target.value);
+          }}
+          placeholder="e.g. 224800004269 (Below barcode)"
+          error={getFieldIssue('trackingId') || getFieldIssue('awbNumber')}
           disabled={isSaving || isReScanning}
         />
         <Input
@@ -247,7 +242,7 @@ export function ShipmentCorrectionForm({
           disabled={isSaving || isReScanning}
           leftIcon={<ShieldCheck size={16} />}
         >
-          {isSaving ? 'Saving & Verifying...' : 'Save & Resolve'}
+          {isSaving ? 'Saving & Verifying...' : 'Save & Resolve (Mark Ready)'}
         </Button>
       </div>
     </form>

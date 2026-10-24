@@ -1,18 +1,18 @@
+'use client';
+
 import React, { useState, useEffect, useMemo } from 'react';
 import styles from './SmsModal.module.css';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Shipment } from '@/types/shipment';
-import { sendSms, sendBulkSms } from '@/lib/shipments';
-import { Send, CheckCircle2, Copy, Smartphone, Info } from 'lucide-react';
+import { sendSms, sendBulkSms, formatWhatsAppPhone, getCourierTrackingInfo } from '@/lib/shipments';
+import { Send, CheckCircle2, Copy, Smartphone, MessageCircle, Info, ExternalLink } from 'lucide-react';
 
 export interface SmsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  // If single shipment:
   shipment?: Shipment | null;
-  // If bulk shipments:
   shipments?: Shipment[];
   onSuccess?: (msg: string) => void;
 }
@@ -24,24 +24,10 @@ export function SmsModal({
   shipments = [],
   onSuccess,
 }: SmsModalProps) {
-  const readyShipments = useMemo(
-    () =>
-      shipments.filter(
-        (s) => String(s.status || '').trim().toUpperCase() === 'READY'
-      ),
-    [shipments]
-  );
-  const targetShipment = useMemo(
-    () =>
-      shipment && String(shipment.status || '').trim().toUpperCase() === 'READY'
-        ? shipment
-        : null,
-    [shipment]
-  );
-  const isBulk = readyShipments.length > 0;
-  const targetCount = isBulk ? readyShipments.length : (targetShipment ? 1 : 0);
+  const targetShipment = shipment || null;
+  const isBulk = shipments.length > 0;
+  const targetCount = isBulk ? shipments.length : targetShipment ? 1 : 0;
 
-  // Sender Number stored in localStorage
   const [senderNumber, setSenderNumber] = useState<string>('');
   const [recipientNumber, setRecipientNumber] = useState<string>('');
   const [message, setMessage] = useState<string>('');
@@ -63,35 +49,51 @@ export function SmsModal({
 
     setSentSuccessMsg(null);
     if (isBulk) {
-      const validNumbers = readyShipments.map((s) => s.mobileNumber).filter(Boolean);
-      setRecipientNumber(`${validNumbers.length} recipients selected (${validNumbers.slice(0, 3).join(', ')}${validNumbers.length > 3 ? '...' : ''})`);
+      const validNumbers = shipments.map((s) => s.mobileNumber).filter(Boolean);
+      setRecipientNumber(
+        `${validNumbers.length} recipients selected (${validNumbers.slice(0, 3).join(', ')}${
+          validNumbers.length > 3 ? '...' : ''
+        })`
+      );
       setMessage(
-        `Hello {name}!` +
-        `\n\nYour shipment is ready for dispatch.` +
-        `\nTracking ID: {awb}` +
-        `\nCourier Partner: {courier}` +
-        `\nCity: {city}` +
-        `\n\nThank you.`
+        'Namaste {name}! 🙏\n\n' +
+        'Your order from Draupadi Fashion is ready for dispatch! 📦\n' +
+        'Tracking ID: {tracking_id}\n' +
+        'Courier: {courier}\n' +
+        'Destination: {city}\n\n' +
+        'Thank you!'
       );
     } else if (targetShipment) {
       setRecipientNumber(targetShipment.mobileNumber || '');
       const name = targetShipment.name || 'Customer';
-      const awb = targetShipment.awbNumber || 'N/A';
-      const courier = targetShipment.courierPartnerName || 'N/A';
-      const location = [targetShipment.city, targetShipment.state].filter(Boolean).join(', ') || 'N/A';
-      const pincode = targetShipment.pincode || 'N/A';
+      const tracking = targetShipment.trackingId || targetShipment.awbNumber || 'Pending / N/A';
+      const courierInfo = getCourierTrackingInfo(targetShipment.courierPartnerName, tracking);
+      const location = [targetShipment.city, targetShipment.state].filter(Boolean).join(', ') || 'Your address';
+      const trackLink = courierInfo.trackingUrl ? `\nTrack Online: ${courierInfo.trackingUrl}` : '';
 
-      setMessage(
-        `Hello ${name}!` +
-        `\n\nYour shipment is ready for dispatch.` +
-        `\nTracking ID: ${awb}` +
-        `\nCourier Partner: ${courier}` +
-        `\nCity/State: ${location}` +
-        `\nPincode: ${pincode}` +
-        `\n\nThank you.`
-      );
+      if (targetShipment.status === 'SHIPPED') {
+        setMessage(
+          `Namaste ${name}! 🙏\n\n` +
+          `Your parcel from Draupadi Fashion has been dispatched! 🚚\n\n` +
+          `🔖 Tracking ID: ${tracking}\n` +
+          `🚚 Courier: ${courierInfo.name}\n` +
+          `📍 Destination: ${location}` +
+          `${trackLink}\n\n` +
+          `Thank you for trusting Draupadi Fashion, Biaora!`
+        );
+      } else {
+        setMessage(
+          `Namaste ${name}! 🙏\n\n` +
+          `Your parcel from Draupadi Fashion is ready for dispatch! 📦\n\n` +
+          `🔖 Tracking ID: ${tracking}\n` +
+          `🚚 Courier: ${courierInfo.name}\n` +
+          `📍 Destination: ${location}` +
+          `${trackLink}\n\n` +
+          `Thank you for shopping with Draupadi Fashion, Biaora!`
+        );
+      }
     }
-  }, [isOpen, targetShipment?.id, isBulk, readyShipments.length]);
+  }, [isOpen, targetShipment?.id, isBulk, shipments.length]);
 
   const handleSenderChange = (val: string) => {
     setSenderNumber(val);
@@ -112,11 +114,31 @@ export function SmsModal({
     }
   };
 
-  const handleSend = async () => {
-    if (!senderNumber.trim()) {
-      alert('Please enter your Sender Number (Mobile / SIM / Sender ID).');
+  // Launch SMS on device (works on Mobile and Windows Phone Link / Messages)
+  const handleOpenDeviceSms = () => {
+    const rawDigits = recipientNumber.replace(/\D/g, '');
+    if (!rawDigits) {
+      alert('Please enter a valid recipient phone number.');
       return;
     }
+    const cleanPhone = rawDigits.length === 10 ? `+91${rawDigits}` : rawDigits;
+    const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const smsUri = `sms:${cleanPhone}${isIOS ? '&' : '?'}body=${encodeURIComponent(message)}`;
+    window.location.href = smsUri;
+  };
+
+  // Quick switch to send on WhatsApp
+  const handleSendViaWhatsApp = () => {
+    const clean = formatWhatsAppPhone(recipientNumber);
+    if (!clean) {
+      alert('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    const url = `https://api.whatsapp.com/send?phone=${clean}&text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleSend = async () => {
     if (!message.trim()) {
       alert('SMS message text cannot be empty.');
       return;
@@ -127,31 +149,35 @@ export function SmsModal({
 
     try {
       if (isBulk) {
-        const ids = readyShipments.map((s) => s.id);
+        const ids = shipments.map((s) => s.id);
         const res = await sendBulkSms({
           shipmentIds: ids,
           fromNumber: senderNumber.trim(),
           customMessage: message,
         });
 
-        const successText = `Successfully dispatched SMS to ${res.sentCount} of ${res.totalCount} recipients from ${senderNumber}!`;
+        const successText = `Successfully prepared SMS for ${res.sentCount} of ${res.totalCount} recipients!`;
         setSentSuccessMsg(successText);
         onSuccess?.(successText);
       } else if (targetShipment) {
-        if (!recipientNumber.trim()) {
+        const rawPhone = recipientNumber.replace(/\D/g, '');
+        if (!rawPhone) {
           alert('Recipient mobile number is required.');
           setIsSending(false);
           return;
         }
 
-        const res = await sendSms({
+        await sendSms({
           shipmentId: targetShipment.id,
-          fromNumber: senderNumber.trim(),
+          fromNumber: senderNumber.trim() || 'DraupadiFashion',
           toNumber: recipientNumber.trim(),
           message,
         });
 
-        const successText = `SMS dispatched successfully from ${senderNumber} to ${recipientNumber}!`;
+        // Trigger device SMS application so user can send in 1 tap
+        handleOpenDeviceSms();
+
+        const successText = `SMS notification opened for ${recipientNumber}!`;
         setSentSuccessMsg(successText);
         onSuccess?.(successText);
       }
@@ -169,18 +195,31 @@ export function SmsModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={isBulk ? `Bulk SMS Dispatch (${targetCount} Shipments)` : 'Direct SMS Notification'}
+      title={isBulk ? `Bulk SMS Dispatch (${targetCount} Shipments)` : 'Direct SMS Tracking Notification'}
       size="md"
       footer={
         <div className={styles.footerActions}>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleCopyMessage}
-            leftIcon={<Copy size={14} />}
-          >
-            {copied ? 'Copied!' : 'Copy Text'}
-          </Button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopyMessage}
+              leftIcon={<Copy size={14} />}
+            >
+              {copied ? 'Copied!' : 'Copy Text'}
+            </Button>
+            {!isBulk && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSendViaWhatsApp}
+                leftIcon={<MessageCircle size={14} color="#16a34a" />}
+                title="Send via WhatsApp Web/App"
+              >
+                Send via WhatsApp
+              </Button>
+            )}
+          </div>
 
           <div className={styles.rightActions}>
             <Button variant="secondary" size="md" onClick={onClose} disabled={isSending}>
@@ -201,55 +240,60 @@ export function SmsModal({
       }
     >
       <div className={styles.container}>
-        {sentSuccessMsg ? (
-          <div className={styles.successBanner}>
-            <CheckCircle2 size={18} />
+        <div className={styles.infoBanner}>
+          <Info size={16} />
+          <span>
+            Sends an SMS with the official <strong>Tracking ID / AWB Number</strong>. On mobile or Windows PC with Phone Link, clicking Send opens the device SMS app with the text pre-filled.
+          </span>
+        </div>
+
+        {sentSuccessMsg && (
+          <div className={styles.successAlert} role="alert">
+            <CheckCircle2 size={16} />
             <span>{sentSuccessMsg}</span>
-          </div>
-        ) : (
-          <div className={styles.banner}>
-            <Info size={16} />
-            <span>
-              Direct SMS dispatch via configured sender number. Enter your sender phone or SIM number below.
-            </span>
           </div>
         )}
 
-        <div className={styles.row2}>
+        <div className={styles.fieldsGrid}>
           <Input
-            label="Send From (Sender Phone / SIM No)"
+            label="Sender ID / Phone"
             value={senderNumber}
             onChange={(e) => handleSenderChange(e.target.value)}
-            placeholder="e.g. +91 9876543210"
-            
+            placeholder="e.g. DraupadiFashion or +919876543210"
           />
+
           <Input
-            label={isBulk ? 'Recipients' : 'Recipient Mobile'}
+            label={isBulk ? 'Recipients' : 'Recipient Mobile Number'}
             value={recipientNumber}
-            onChange={(e) => !isBulk && setRecipientNumber(e.target.value)}
-            placeholder="e.g. 9998989906"
+            onChange={(e) => setRecipientNumber(e.target.value)}
+            placeholder="e.g. 9303003570"
             disabled={isBulk}
             type="tel"
           />
         </div>
 
         <div className={styles.textareaGroup}>
-          <label className={styles.label}>SMS Message Content</label>
+          <div className={styles.label}>
+            <span>SMS Message (contains Tracking ID)</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              {message.length} chars
+            </span>
+          </div>
           <textarea
             className={styles.textarea}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Type your SMS message here..."
+            placeholder="Type your SMS message..."
+            rows={6}
           />
-          {isBulk && (
-            <div className={styles.chipsContainer}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Variables:</span>
-              <button type="button" className={styles.chip} onClick={() => handleInsertTag(' {name}')}>+ {'{name}'}</button>
-              <button type="button" className={styles.chip} onClick={() => handleInsertTag(' {awb}')}>+ {'{awb}'}</button>
-              <button type="button" className={styles.chip} onClick={() => handleInsertTag(' {courier}')}>+ {'{courier}'}</button>
-              <button type="button" className={styles.chip} onClick={() => handleInsertTag(' {city}')}>+ {'{city}'}</button>
-            </div>
-          )}
+
+          <div className={styles.chipsContainer}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Variables:</span>
+            <button type="button" className={styles.chip} onClick={() => handleInsertTag(' {name}')}>+ {'{name}'}</button>
+            <button type="button" className={styles.chip} onClick={() => handleInsertTag(' {tracking_id}')}>+ {'{tracking_id}'}</button>
+            <button type="button" className={styles.chip} onClick={() => handleInsertTag(' {courier}')}>+ {'{courier}'}</button>
+            <button type="button" className={styles.chip} onClick={() => handleInsertTag(' {city}')}>+ {'{city}'}</button>
+          </div>
         </div>
       </div>
     </Modal>

@@ -11,10 +11,11 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Button } from '@/components/ui/Button';
-import { CheckCircle2, RefreshCw, Package, Info, ScanLine } from 'lucide-react';
+import { CheckCircle2, RefreshCw, Package, Info, ScanLine, Sparkles } from 'lucide-react';
 import { Shipment } from '@/types/shipment';
 import { ShipmentCorrectionPayload } from '@/types/api';
 import { getIssues, resolveShipment, reScanShipment } from '@/lib/shipments';
+import { GeminiSettingsModal } from '@/components/ui/GeminiSettingsModal';
 
 interface ToastState {
   type: 'success' | 'error' | 'warning' | 'info';
@@ -32,6 +33,7 @@ function IssuesContent() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isReScanning, setIsReScanning] = useState<boolean>(false);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [isGeminiModalOpen, setIsGeminiModalOpen] = useState<boolean>(false);
 
   // Fetch real issues from backend
   const fetchIssues = useCallback(async (preserveSelectedId?: string | null) => {
@@ -112,27 +114,43 @@ function IssuesContent() {
 
     setIsSaving(true);
     try {
+      const currentImageUrl = selectedShipment.imageUrl;
       const updatedShipment = await resolveShipment(selectedShipment.id, payload);
 
-      setToast({
-        type: 'success',
-        message: `Shipment ${updatedShipment.awbNumber || updatedShipment.id.slice(0, 8)} resolved successfully.`,
-      });
+      if (!updatedShipment.imageUrl && currentImageUrl) {
+        updatedShipment.imageUrl = currentImageUrl;
+      }
 
-      const remainingIssues = issuesList.filter(
-        (item) => item.id !== updatedShipment.id
-      );
-      setIssuesList(remainingIssues);
+      if (updatedShipment.status === 'READY') {
+        setToast({
+          type: 'success',
+          message: `Shipment ${updatedShipment.awbNumber || updatedShipment.id.slice(0, 8)} verified and marked Ready for dispatch!`,
+        });
 
-      if (remainingIssues.length > 0) {
-        const currentIndex = issuesList.findIndex(
-          (item) => item.id === updatedShipment.id
+        const remainingIssues = issuesList.filter(
+          (item) => item.id !== updatedShipment.id
         );
-        const nextIndex =
-          currentIndex < remainingIssues.length ? currentIndex : 0;
-        setSelectedIssueId(remainingIssues[nextIndex].id);
+        setIssuesList(remainingIssues);
+
+        if (remainingIssues.length > 0) {
+          const currentIndex = issuesList.findIndex(
+            (item) => item.id === updatedShipment.id
+          );
+          const nextIndex =
+            currentIndex < remainingIssues.length ? currentIndex : 0;
+          setSelectedIssueId(remainingIssues[nextIndex].id);
+        } else {
+          setSelectedIssueId(null);
+        }
       } else {
-        setSelectedIssueId(null);
+        setToast({
+          type: 'success',
+          message: 'Corrections saved successfully.',
+        });
+
+        setIssuesList((prev) =>
+          prev.map((item) => (item.id === updatedShipment.id ? updatedShipment : item))
+        );
       }
     } catch (err: unknown) {
       const msg =
@@ -188,6 +206,15 @@ function IssuesContent() {
             Refresh Queue
           </Button>
 
+          {/* <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsGeminiModalOpen(true)}
+            leftIcon={<Sparkles size={14} color="#8b5cf6" />}
+          >
+            Vision Engine
+          </Button> */}
+
           <Link href="/shipments">
             <Button variant="ghost" size="sm" leftIcon={<Package size={14} />}>
               View All Shipments
@@ -195,6 +222,14 @@ function IssuesContent() {
           </Link>
         </div>
       </div>
+
+      <GeminiSettingsModal
+        isOpen={isGeminiModalOpen}
+        onClose={() => setIsGeminiModalOpen(false)}
+        onSaved={() => {
+          fetchIssues(selectedIssueId);
+        }}
+      />
 
       {/* Toast Notification */}
       {toast && (

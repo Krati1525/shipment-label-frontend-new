@@ -105,7 +105,7 @@ export default function UploadPage() {
       const message =
         err instanceof Error
           ? err.message
-          : 'Failed to upload shipment labels. Please verify server connectivity.';
+          : 'Failed to save shipment labels to local database. Please try again.';
       setErrorMessage(message);
       setUploadState('ERROR');
       // Selected files remain intact in queuedFiles for the user to retry
@@ -169,10 +169,10 @@ export default function UploadPage() {
             <div className={styles.uploadingCard} role="status" aria-live="polite">
               <div className={styles.spinner} />
               <div className={styles.uploadingTitle}>
-                Uploading {queuedFiles.length} {queuedFiles.length === 1 ? 'label' : 'labels'} to backend...
+                Saving {queuedFiles.length} {queuedFiles.length === 1 ? 'label' : 'labels'} to local storage...
               </div>
               <div className={styles.uploadingSubtitle}>
-                Creating shipment records with status PROCESSING. Please wait...
+                Creating shipment records with status PROCESSING in browser database. Please wait...
               </div>
             </div>
           )}
@@ -212,8 +212,8 @@ export default function UploadPage() {
                   rightIcon={<ArrowRight size={18} />}
                 >
                   {isUploading
-                    ? `Uploading ${queuedFiles.length} Labels...`
-                    : `Upload ${queuedFiles.length} ${queuedFiles.length === 1 ? 'Label' : 'Labels'}`}
+                    ? `Saving ${queuedFiles.length} Labels...`
+                    : `Save ${queuedFiles.length} ${queuedFiles.length === 1 ? 'Label' : 'Labels'}`}
                 </Button>
               </div>
             </section>

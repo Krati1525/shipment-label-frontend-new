@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from './IssueReviewPanel.module.css';
 import { ImagePreview } from '@/components/ui/ImagePreview';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
@@ -8,6 +8,7 @@ import { ShipmentCorrectionForm } from './ShipmentCorrectionForm';
 import { Shipment } from '@/types/shipment';
 import { ShipmentCorrectionPayload } from '@/types/api';
 import { getFullImageUrl } from '@/lib/utils';
+import { getShipment } from '@/lib/shipments';
 import { AlertTriangle, Hash, FileText, ScanLine } from 'lucide-react';
 
 export interface IssueReviewPanelProps {
@@ -25,7 +26,20 @@ export function IssueReviewPanel({
   onReScan,
   isReScanning = false,
 }: IssueReviewPanelProps) {
-  const fullImageUrl = getFullImageUrl(shipment.imageUrl);
+  const [activeImageUrl, setActiveImageUrl] = useState<string | null>(getFullImageUrl(shipment.imageUrl));
+
+  useEffect(() => {
+    const current = getFullImageUrl(shipment.imageUrl);
+    if (current) {
+      setActiveImageUrl(current);
+    } else if (shipment.id) {
+      getShipment(shipment.id).then((fresh) => {
+        if (fresh?.imageUrl) {
+          setActiveImageUrl(getFullImageUrl(fresh.imageUrl));
+        }
+      }).catch(() => {});
+    }
+  }, [shipment.id, shipment.imageUrl]);
 
   return (
     <div className={styles.workspace}>
@@ -38,7 +52,7 @@ export function IssueReviewPanel({
           />
           <CardBody>
             <ImagePreview
-              src={fullImageUrl}
+              src={activeImageUrl}
               alt={`Label for ${shipment.name || shipment.id}`}
               maxHeight="540px"
             />
@@ -61,9 +75,9 @@ export function IssueReviewPanel({
                 <span className={styles.metaId}>
                   <Hash size={12} /> {shipment.id}
                 </span>
-                {shipment.awbNumber && (
+                {(shipment.trackingId || shipment.awbNumber) && (
                   <span className={styles.metaAwb}>
-                    AWB: <strong>{shipment.awbNumber}</strong>
+                    Tracking ID: <strong>{shipment.trackingId || shipment.awbNumber}</strong>
                   </span>
                 )}
                 {shipment.originalFileName && (
@@ -90,7 +104,7 @@ export function IssueReviewPanel({
 
           <CardHeader
             title="Correct Extracted Fields"
-            subtitle="All fields are optional. Verify or correct fields and click Save & Resolve."
+            subtitle="Verify extracted fields and fill any available values. All fields are optional — saving will mark this shipment Ready for dispatch."
           />
           <CardBody>
             <ShipmentCorrectionForm

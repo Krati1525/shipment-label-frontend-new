@@ -120,7 +120,7 @@ export function ShipmentTable({
                   onClick={() => onSortChange?.('awbNumber')}
                   aria-label="Sort by AWB number"
                 >
-                  <span>AWB Number</span>
+                  <span>Tracking ID / AWB</span>
                   {renderSortIndicator('awbNumber')}
                 </button>
               </th>
@@ -276,7 +276,7 @@ export function ShipmentTable({
                     {/* AWB Number */}
                     <td className={styles.td}>
                       <span className={styles.mono}>
-                        {shipment.awbNumber || '—'}
+                        {shipment.trackingId || shipment.awbNumber || '—'}
                       </span>
                     </td>
 
@@ -345,8 +345,8 @@ export function ShipmentTable({
                             Edit
                           </Button>
                         )}
-                        
-                        {onOpenWhatsApp && isReady && (
+
+                        {onOpenWhatsApp && (isReady || shipment.status === 'SHIPPED') && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -360,7 +360,7 @@ export function ShipmentTable({
                             <MessageCircle size={14} color="#16a34a" />
                           </Button>
                         )}
-                        {onOpenSms && isReady && (
+                        {/* {onOpenSms && (isReady || shipment.status === 'SHIPPED') && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -371,9 +371,9 @@ export function ShipmentTable({
                             title="Send Direct SMS"
                             aria-label={`Send SMS to ${shipment.mobileNumber || 'recipient'}`}
                           >
-                            <MessageSquare size={14} color="var(--text-secondary)" />
+                            <MessageSquare size={14} color="var(--primary)" />
                           </Button>
-                        )}
+                        )} */}
                         {onDeleteShipment && (
                           <Button
                             variant="ghost"

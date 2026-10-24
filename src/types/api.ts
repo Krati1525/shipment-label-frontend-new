@@ -22,6 +22,7 @@ export interface ShipmentCorrectionPayload {
   state?: string | null;
   pincode?: string | null;
   awbNumber?: string | null;
+  trackingId?: string | null;
   courierPartnerName?: string | null;
   weight?: number | string | null;
   amount?: number | string | null;

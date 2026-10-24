@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import styles from './Sidebar.module.css';
@@ -10,9 +10,11 @@ import {
   AlertTriangle,
   Package,
   Layers,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme';
+import { GeminiSettingsModal } from '@/components/ui/GeminiSettingsModal';
 
 interface NavItem {
   label: string;
@@ -34,6 +36,7 @@ export interface SidebarProps {
 
 export function Sidebar({ isOpenOnMobile = false, onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
+  const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
 
   return (
     <>
@@ -82,7 +85,17 @@ export function Sidebar({ isOpenOnMobile = false, onCloseMobile }: SidebarProps)
           })}
         </nav>
 
-        <div className={styles.footer}>
+        {/* <button
+          type="button"
+          onClick={() => setIsGeminiModalOpen(true)}
+          className={styles.visionEngineBtn}
+          title="Configure OCR Vision Engine & API Key"
+        >
+          <Sparkles size={15} />
+          <span>Vision Engine</span>
+        </button> */}
+
+        {/* <div className={styles.footer}>
           <div className={styles.footerRow}>
             <div className={styles.footerStatus}>
               <span className={styles.pulseDot} />
@@ -91,8 +104,13 @@ export function Sidebar({ isOpenOnMobile = false, onCloseMobile }: SidebarProps)
             <ThemeToggle variant="icon" />
           </div>
           <span className={styles.footerVersion}>Logistics Operations v1.0</span>
-        </div>
+        </div> */}
       </aside>
+
+      <GeminiSettingsModal
+        isOpen={isGeminiModalOpen}
+        onClose={() => setIsGeminiModalOpen(false)}
+      />
     </>
   );
 }

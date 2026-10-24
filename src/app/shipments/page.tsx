@@ -92,7 +92,7 @@ function ShipmentsContent() {
 
     if (statusParam) {
       const upper = statusParam.toUpperCase();
-      if (['PROCESSING', 'PAUSED', 'ISSUE', 'READY', 'SHIPPED', 'ALL'].includes(upper)) {
+      if (['PROCESSING', 'ISSUE', 'READY', 'SHIPPED', 'ALL'].includes(upper)) {
         setFilters((prev) => {
           if (prev.status === upper) return prev;
           return {
@@ -317,7 +317,6 @@ function ShipmentsContent() {
   };
 
   const handleOpenWhatsApp = (shipment: Shipment) => {
-    if (String(shipment.status || '').trim().toUpperCase() !== 'READY') return;
     setWhatsAppShipment(shipment);
   };
 
@@ -361,7 +360,7 @@ function ShipmentsContent() {
         message: `Shipment ${updated.awbNumber || updated.id.slice(0, 8)} updated successfully.`,
       });
       setShipments((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...updated } : s))
+        prev.map((s) => (s.id === id ? { ...s, ...updated, imageUrl: updated.imageUrl || s.imageUrl } : s))
       );
       setDrawerRefreshTrigger((prev) => prev + 1);
       setEditingShipment(null);
@@ -385,7 +384,6 @@ function ShipmentsContent() {
   };
 
   const handleOpenSms = (shipment: Shipment) => {
-    if (String(shipment.status || '').trim().toUpperCase() !== 'READY') return;
     setSmsShipment(shipment);
   };
 

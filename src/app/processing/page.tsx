@@ -13,14 +13,19 @@ import {
   AlertTriangle,
   RotateCcw,
   Package,
-  CheckCircle2,
-  XCircle,
   UploadCloud,
   Pause,
   Play,
 } from 'lucide-react';
-import { runBatchOcr, extractBatch, getShipment, pauseBatch, resumeBatch } from '@/lib/shipments';
-import { ProcessingShipmentItem } from '@/types/shipment';
+import {
+  runBatchOcr,
+  extractBatch,
+  getShipment,
+  getShipments,
+  pauseBatch,
+  resumeBatch,
+} from '@/lib/shipments';
+import { ProcessingShipmentItem, Shipment } from '@/types/shipment';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,11 +40,13 @@ function ProcessingContent() {
   const hasInvalidFormat = rawIds.length > 0 && validIds.length < rawIds.length;
 
   const [items, setItems] = useState<ProcessingShipmentItem[]>([]);
+  const [isLoadingQueue, setIsLoadingQueue] = useState<boolean>(true);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [currentStageMessage, setCurrentStageMessage] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const isPausedRef = useRef<boolean>(false);
+  const pipelineRunningRef = useRef<boolean>(false);
 
   const handlePause = async () => {
     setIsPaused(true);
@@ -52,7 +59,7 @@ function ProcessingContent() {
     setItems((prev) =>
       prev.map((item) =>
         pendingIds.includes(item.shipmentId)
-          ? { ...item, status: 'PAUSED', stage: 'PAUSED' }
+          ? { ...item, stage: 'PAUSED' }
           : item
       )
     );
@@ -83,137 +90,260 @@ function ProcessingContent() {
     }
   };
 
-  // Prevent duplicate execution on initial mount or re-renders
-  const hasStartedRef = useRef<boolean>(false);
-
   useEffect(() => {
-    if (rawIds.length === 0) return;
-    if (validIds.length === 0) return;
-    if (hasStartedRef.current) return;
+    let isMounted = true;
 
-    hasStartedRef.current = true;
-    initializeAndProcess(validIds);
-  }, []);
+    const loadQueue = async () => {
+      setIsLoadingQueue(true);
+      setErrorMessage(null);
 
-  const initializeAndProcess = async (ids: string[]) => {
+      try {
+        let targetIds: string[] = [];
+
+        if (rawIds.length > 0) {
+          if (validIds.length > 0) {
+            targetIds = validIds;
+          } else if (hasInvalidFormat) {
+            // Only invalid IDs provided in query
+            if (isMounted) {
+              setIsLoadingQueue(false);
+            }
+            return;
+          }
+        } else {
+          // No IDs in URL: Recover pending shipments from IndexedDB (e.g. after refresh or direct navigation)
+          try {
+            const pendingList = await getShipments({ status: 'PROCESSING', limit: 100 });
+            if (pendingList && pendingList.data && pendingList.data.length > 0) {
+              targetIds = pendingList.data.map((s) => s.id);
+            }
+          } catch (dbErr) {
+            console.warn('Could not query pending shipments from local DB:', dbErr);
+          }
+        }
+
+        if (!isMounted) return;
+
+        if (targetIds.length === 0) {
+          setItems([]);
+          setIsLoadingQueue(false);
+          return;
+        }
+
+        // Fetch shipment records
+        const loadedShipments = await Promise.all(
+          targetIds.map(async (id) => {
+            try {
+              const s = await getShipment(id);
+              return {
+                shipmentId: s.id,
+                originalFileName: s.originalFileName || `Shipment #${s.id.slice(0, 8)}`,
+                imageUrl: s.imageUrl,
+                stage: (s.status === 'READY' || s.status === 'ISSUE' || s.status === 'SHIPPED'
+                  ? 'COMPLETE'
+                  : 'WAITING') as ProcessingShipmentItem['stage'],
+                status: s.status,
+                hasIssues: s.hasIssues,
+                issues: (s.issues as ProcessingShipmentItem['issues']) || null,
+                extractedFields: s.name || s.awbNumber ? {
+                  name: s.name,
+                  mobileNumber: s.mobileNumber,
+                  awbNumber: s.awbNumber,
+                  courierPartnerName: s.courierPartnerName,
+                  city: s.city,
+                } : null,
+                rawOcrText: s.rawOcrText,
+              };
+            } catch {
+              return {
+                shipmentId: id,
+                originalFileName: `Shipment #${id.slice(0, 8)}`,
+                imageUrl: null,
+                stage: 'ERROR' as ProcessingShipmentItem['stage'],
+                status: 'PROCESSING' as const,
+                error: `Shipment #${id.slice(0, 8)} not found in database.`,
+              };
+            }
+          })
+        );
+
+        if (!isMounted) return;
+
+        setItems(loadedShipments);
+
+        // Identify which shipments still require OCR & extraction
+        const pendingIds = loadedShipments
+          .filter((item) => item.status === 'PROCESSING' && item.stage !== 'ERROR')
+          .map((item) => item.shipmentId);
+
+        if (pendingIds.length > 0 && !pipelineRunningRef.current) {
+          executePipeline(pendingIds);
+        }
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Unable to load shipments from database.';
+        setErrorMessage(msg);
+      } finally {
+        if (isMounted) {
+          setIsLoadingQueue(false);
+        }
+      }
+    };
+
+    loadQueue();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [searchParams]);
+
+  const executePipeline = async (idsToProcess: string[]) => {
+    if (pipelineRunningRef.current) return;
+    pipelineRunningRef.current = true;
     setIsProcessing(true);
     setErrorMessage(null);
-    setCurrentStageMessage('Verifying shipment state in database...');
 
     try {
-      // 1. Fetch current status of all shipments to check if any are already completed
-      const initialShipments = await Promise.all(
-        ids.map(async (id) => {
+      // 1. Fetch current records from IndexedDB to accurately identify which need OCR vs direct extraction
+      const records = await Promise.all(
+        idsToProcess.map(async (id) => {
           try {
-            const s = await getShipment(id);
-            return {
-              shipmentId: s.id,
-              originalFileName: s.originalFileName || `Shipment #${s.id.slice(0, 8)}`,
-              imageUrl: s.imageUrl,
-              stage: (s.status === 'READY' || s.status === 'ISSUE' || s.status === 'SHIPPED'
-                ? 'COMPLETE'
-                : 'WAITING') as ProcessingShipmentItem['stage'],
-              status: s.status,
-              hasIssues: s.hasIssues,
-              issues: (s.issues as Record<string, string>) || null,
-              extractedFields: s.name || s.awbNumber ? {
-                name: s.name,
-                mobileNumber: s.mobileNumber,
-                awbNumber: s.awbNumber,
-                courierPartnerName: s.courierPartnerName,
-                city: s.city,
-              } : null,
-              rawOcrText: s.rawOcrText,
-            };
+            return await getShipment(id);
           } catch {
-            return {
-              shipmentId: id,
-              originalFileName: `Shipment #${id.slice(0, 8)}`,
-              imageUrl: null,
-              stage: 'ERROR' as ProcessingShipmentItem['stage'],
-              status: 'PROCESSING' as const,
-              error: 'Failed to fetch shipment details from server.',
-            };
+            return null;
           }
         })
       );
 
-      setItems(initialShipments);
-
-      // 2. Identify which shipments still require OCR & extraction
-      const pendingIds = initialShipments
-        .filter((item) => item.status === 'PROCESSING' && item.stage !== 'ERROR')
-        .map((item) => item.shipmentId);
-
-      if (pendingIds.length === 0) {
-        // All shipments were already completed
+      const validRecords = records.filter((r): r is Shipment => r !== null);
+      if (validRecords.length === 0) {
         setIsProcessing(false);
-        setCurrentStageMessage('All shipments have already completed processing.');
+        pipelineRunningRef.current = false;
         return;
       }
 
-      await executePipeline(pendingIds);
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Unable to connect to server. Please check backend connection.';
-      setErrorMessage(msg);
-      setIsProcessing(false);
-    }
-  };
+      const needsOcrIds: string[] = [];
+      const hasOcrIds: string[] = [];
 
-  const executePipeline = async (idsToProcess: string[]) => {
-    setIsProcessing(true);
-    setErrorMessage(null);
+      for (const r of validRecords) {
+        if (r.rawOcrText && r.rawOcrText.trim().length > 15) {
+          hasOcrIds.push(r.id);
+        } else {
+          needsOcrIds.push(r.id);
+        }
+      }
 
-    // --- STEP 1: BATCH OCR ---
-    setCurrentStageMessage('Reading shipment labels (Batch OCR in progress)...');
-    setItems((prev) =>
-      prev.map((item) =>
-        idsToProcess.includes(item.shipmentId)
-          ? { ...item, stage: 'OCR', error: null }
-          : item
-      )
-    );
-
-    let ocrSucceededIds: string[] = [];
-
-    try {
-      const ocrResponse = await runBatchOcr(idsToProcess);
-      const results = ocrResponse.results || [];
-
-      ocrSucceededIds = results
-        .filter((r) => r.success !== false)
-        .map((r) => r.shipmentId);
-
-      // Update each item with OCR result
+      // Update UI stage immediately
       setItems((prev) =>
         prev.map((item) => {
-          const res = results.find((r) => r.shipmentId === item.shipmentId);
+          if (needsOcrIds.includes(item.shipmentId)) {
+            return { ...item, stage: 'OCR', error: null };
+          }
+          if (hasOcrIds.includes(item.shipmentId)) {
+            return { ...item, stage: 'EXTRACTION', error: null };
+          }
+          return item;
+        })
+      );
+
+      const ocrSucceededIds: string[] = [...hasOcrIds];
+
+      // --- STEP 1: LOCAL BATCH OCR (for items needing OCR) ---
+      if (needsOcrIds.length > 0) {
+        setCurrentStageMessage(
+          `Reading ${needsOcrIds.length} label${needsOcrIds.length > 1 ? 's' : ''} (OCR in progress)...`
+        );
+
+        const ocrResponse = await runBatchOcr(needsOcrIds, {
+          onItemProgress: (info) => {
+            setCurrentStageMessage(info.stageMessage);
+          },
+          shouldPause: () => isPausedRef.current,
+        });
+
+        const results = ocrResponse.results || [];
+        for (const res of results) {
+          if (res.success && res.rawOcrText) {
+            ocrSucceededIds.push(res.shipmentId);
+          }
+        }
+
+        setItems((prev) =>
+          prev.map((item) => {
+            const res = results.find((r) => r.shipmentId === item.shipmentId);
+            if (!res) return item;
+
+            if (res.success === false) {
+              return {
+                ...item,
+                stage: 'ERROR',
+                error: res.error || 'OCR text extraction failed for this image.',
+              };
+            }
+
+            return {
+              ...item,
+              rawOcrText: res.rawOcrText,
+              stage: 'EXTRACTION',
+              status: 'PROCESSING',
+            };
+          })
+        );
+      }
+
+      if (isPausedRef.current) {
+        setCurrentStageMessage('Processing paused by user.');
+        setIsProcessing(false);
+        pipelineRunningRef.current = false;
+        return;
+      }
+
+      if (ocrSucceededIds.length === 0) {
+        setCurrentStageMessage('OCR failed for all requested labels.');
+        setIsProcessing(false);
+        pipelineRunningRef.current = false;
+        return;
+      }
+
+      // --- STEP 2: STRUCTURED FIELD EXTRACTION & VALIDATION ---
+      setCurrentStageMessage('Extracting logistics entities and validating fields...');
+
+      const extractionResponse = await extractBatch(ocrSucceededIds);
+      const extResults = extractionResponse.results || [];
+
+      setItems((prev) =>
+        prev.map((item) => {
+          const res = extResults.find((r) => r.shipmentId === item.shipmentId);
           if (!res) return item;
 
-          if (res.success === false) {
+          if (!res.success) {
             return {
               ...item,
               stage: 'ERROR',
-              error: res.error || 'OCR text extraction failed for this image.',
+              error: res.error || 'Field extraction failed for this shipment.',
             };
           }
 
           return {
             ...item,
-            rawOcrText: res.rawOcrText,
-            // Status remains PROCESSING until extraction determines status
-            status: 'PROCESSING',
+            stage: 'COMPLETE',
+            status: res.status || 'ISSUE',
+            hasIssues: res.hasIssues ?? false,
+            issues: (res.issues as ProcessingShipmentItem['issues']) || null,
+            extractedFields: res.extractedFields || res.data || null,
           };
         })
       );
+
+      setCurrentStageMessage('Processing completed: OCR and structured field extraction finished.');
     } catch (err: unknown) {
       const msg =
         err instanceof Error
           ? err.message
-          : 'Batch OCR request failed. Please ensure the backend is reachable.';
+          : 'Processing pipeline failed.';
       setErrorMessage(msg);
       setItems((prev) =>
         prev.map((item) =>
@@ -222,84 +352,16 @@ function ProcessingContent() {
             : item
         )
       );
-      setIsProcessing(false);
-      return;
-    }
-
-    if (ocrSucceededIds.length === 0) {
-      setIsProcessing(false);
-      setCurrentStageMessage('OCR failed for all requested labels.');
-      return;
-    }
-
-    if (isPausedRef.current) {
-      setCurrentStageMessage('Processing paused by user.');
-      setIsProcessing(false);
-      return;
-    }
-
-    // --- STEP 2: BATCH EXTRACTION ---
-    setCurrentStageMessage('Extracting and validating shipment fields...');
-    setItems((prev) =>
-      prev.map((item) =>
-        ocrSucceededIds.includes(item.shipmentId)
-          ? { ...item, stage: 'EXTRACTION' }
-          : item
-      )
-    );
-
-    try {
-      const extResponse = await extractBatch(ocrSucceededIds);
-      const extResults = extResponse.results || [];
-
-      setItems((prev) =>
-        prev.map((item) => {
-          const res = extResults.find((r) => r.shipmentId === item.shipmentId);
-          if (!res) return item;
-
-          if (res.success === false) {
-            return {
-              ...item,
-              stage: 'ERROR',
-              error: res.error || 'Structured field extraction failed.',
-            };
-          }
-
-          // Use real backend status (READY or ISSUE)
-          return {
-            ...item,
-            stage: 'COMPLETE',
-            status: res.status || (res.hasIssues ? 'ISSUE' : 'READY'),
-            hasIssues: res.hasIssues,
-            issues: res.issues || null,
-            extractedFields: res.data || null,
-          };
-        })
-      );
-
-      setCurrentStageMessage('Processing completed.');
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Extraction request failed. Please check backend connection.';
-      setErrorMessage(msg);
-      setItems((prev) =>
-        prev.map((item) =>
-          ocrSucceededIds.includes(item.shipmentId)
-            ? { ...item, stage: 'ERROR', error: msg }
-            : item
-        )
-      );
     } finally {
       setIsProcessing(false);
+      pipelineRunningRef.current = false;
     }
   };
 
   const handleRetryFailed = () => {
     if (isProcessing) return;
     const failedIds = items
-      .filter((i) => i.stage === 'ERROR' || (i.status === 'PROCESSING' && i.stage !== 'COMPLETE'))
+      .filter((i) => i.stage === 'ERROR' || i.status === 'PROCESSING')
       .map((i) => i.shipmentId);
 
     if (failedIds.length > 0) {
@@ -307,29 +369,13 @@ function ProcessingContent() {
     }
   };
 
-  // Missing or invalid ID checks
-  if (rawIds.length === 0) {
-    return (
-      <div className={styles.page}>
-        <div className={styles.errorCard} role="alert">
-          <AlertTriangle size={36} color="var(--status-issue-text)" />
-          <div className={styles.errorText}>
-            <h2 className={styles.errorTitle}>No Shipments Selected</h2>
-            <p className={styles.errorDesc}>
-              No shipment IDs were provided in the URL query. Please upload shipment label images first to trigger processing.
-            </p>
-          </div>
-          <Link href="/upload">
-            <Button variant="primary" size="md" leftIcon={<UploadCloud size={16} />}>
-              Go to Upload Page
-            </Button>
-          </Link>
-        </div>
-      </div>
-    );
+  // 1. Loading queue state
+  if (isLoadingQueue) {
+    return <LoadingState message="Loading processing queue..." />;
   }
 
-  if (hasInvalidFormat) {
+  // 2. Invalid ID format check
+  if (hasInvalidFormat && items.length === 0) {
     return (
       <div className={styles.page}>
         <div className={styles.errorCard} role="alert">
@@ -345,6 +391,69 @@ function ProcessingContent() {
               Return to Upload
             </Button>
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Database error state with empty queue
+  if (errorMessage && items.length === 0) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.errorCard} role="alert">
+          <AlertTriangle size={36} color="var(--status-issue-text)" />
+          <div className={styles.errorText}>
+            <h2 className={styles.errorTitle}>Unable to Load Queue</h2>
+            <p className={styles.errorDesc}>{errorMessage}</p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <Button variant="primary" size="md" onClick={() => window.location.reload()} leftIcon={<RotateCcw size={16} />}>
+              Retry
+            </Button>
+            <Link href="/upload">
+              <Button variant="secondary" size="md" leftIcon={<UploadCloud size={16} />}>
+                Return to Upload
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 4. Empty queue state
+  if (items.length === 0) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.headerArea}>
+          <div className={styles.titleGroup}>
+            <h1 className={styles.title}>Processing Labels</h1>
+            <p className={styles.subtitle}>
+              Extracting OCR text and parsing logistics entities (AWB, mobile, courier, address).
+            </p>
+          </div>
+        </div>
+
+        <div className={styles.emptyCard}>
+          <Package size={44} color="var(--primary)" />
+          <div className={styles.errorText}>
+            <h2 className={styles.emptyTitle}>Processing Queue Empty</h2>
+            <p className={styles.emptyDesc}>
+              There are no shipment labels currently waiting in the processing queue. Upload new label images to start OCR and entity extraction.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+            <Link href="/upload">
+              <Button variant="primary" size="md" leftIcon={<UploadCloud size={16} />}>
+                Upload New Labels
+              </Button>
+            </Link>
+            <Link href="/shipments">
+              <Button variant="secondary" size="md" leftIcon={<Package size={16} />}>
+                View All Shipments
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
     );

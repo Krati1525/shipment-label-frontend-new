@@ -1,9 +1,37 @@
-export type ShipmentStatus = 'PROCESSING' | 'PAUSED' | 'ISSUE' | 'READY' | 'SHIPPED';
+export type ShipmentStatus = 'PROCESSING' | 'ISSUE' | 'READY' | 'SHIPPED';
 
 export interface ShipmentIssue {
   field: string;
   message: string;
   severity?: 'warning' | 'error';
+}
+
+export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface FieldConfidence {
+  level: ConfidenceLevel;
+  score?: number;
+  reason?: string;
+}
+
+export type ShipmentEventType =
+  | 'IMAGE_UPLOADED'
+  | 'OCR_COMPLETED'
+  | 'EXTRACTION_COMPLETED'
+  | 'ISSUE_CREATED'
+  | 'ISSUE_RESOLVED'
+  | 'SHIPMENT_EDITED'
+  | 'MARKED_READY'
+  | 'WHATSAPP_OPENED'
+  | 'SMS_OPENED'
+  | 'MARKED_SHIPPED';
+
+export interface ShipmentEvent {
+  id: string;
+  shipmentId: string;
+  type: ShipmentEventType;
+  timestamp: string;
+  details?: string;
 }
 
 export interface Shipment {
@@ -17,6 +45,7 @@ export interface Shipment {
   state: string | null;
   pincode: string | null;
   awbNumber: string | null;
+  trackingId?: string | null;
   courierPartnerName: string | null;
   weight: number | string | null;
   amount: number | string | null;
@@ -27,6 +56,8 @@ export interface Shipment {
   status: ShipmentStatus;
   hasIssues: boolean;
   issues: ShipmentIssue[] | Record<string, string> | null;
+  confidence?: Record<string, FieldConfidence> | null;
+  duplicateWarning?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,7 +125,8 @@ export interface BatchExtractionResultItem {
   status?: ShipmentStatus;
   hasIssues?: boolean;
   data?: Record<string, string | number | null>;
-  issues?: Record<string, string>;
+  extractedFields?: Record<string, string | number | null>;
+  issues?: Record<string, string> | ShipmentIssue[] | null;
   error?: string;
 }
 
@@ -117,7 +149,7 @@ export interface ProcessingShipmentItem {
   stage: ProcessingStage;
   status: ShipmentStatus;
   hasIssues?: boolean;
-  issues?: Record<string, string> | null;
+  issues?: Record<string, string> | ShipmentIssue[] | null;
   extractedFields?: Record<string, string | number | null> | null;
   rawOcrText?: string | null;
   error?: string | null;

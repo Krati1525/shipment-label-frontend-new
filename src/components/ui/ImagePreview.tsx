@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from './ImagePreview.module.css';
 import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Maximize2, X, ImageOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -22,6 +22,13 @@ export function ImagePreview({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(Boolean(src));
   const [isError, setIsError] = useState(false);
+
+  useEffect(() => {
+    setIsError(false);
+    setIsLoading(Boolean(src));
+    setZoom(1);
+    setRotation(0);
+  }, [src]);
 
   const handleZoomIn = () => setZoom((prev) => Math.min(prev + 0.25, 3));
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 0.25, 0.5));

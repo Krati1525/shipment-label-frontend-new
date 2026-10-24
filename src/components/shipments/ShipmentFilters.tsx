@@ -24,7 +24,6 @@ const STATUS_OPTIONS = [
   { value: 'ALL', label: 'All Statuses (Default)' },
   { value: 'READY', label: 'Ready' },
   { value: 'PROCESSING', label: 'Processing' },
-  { value: 'PAUSED', label: 'Paused' },
   { value: 'ISSUE', label: 'Issue' },
   { value: 'SHIPPED', label: 'Shipped' },
 ];

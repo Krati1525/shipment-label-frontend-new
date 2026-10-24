@@ -37,7 +37,7 @@ export function ProcessingShipmentList({ items }: ProcessingShipmentListProps) {
         const isExtract = item.stage === 'EXTRACTION';
         const isError = item.stage === 'ERROR';
         const isWaiting = item.stage === 'WAITING';
-        const isPaused = item.stage === 'PAUSED' || item.status === 'PAUSED';
+        const isPaused = item.stage === 'PAUSED';
 
         return (
           <div key={item.shipmentId} className={styles.itemCard}>
@@ -107,17 +107,26 @@ export function ProcessingShipmentList({ items }: ProcessingShipmentListProps) {
                   </>
                 )}
 
-                {/* COMPLETE State: READY or ISSUE */}
+                {/* COMPLETE State: READY, ISSUE, or Phase 3 OCR COMPLETE */}
                 {isComplete && (
                   <>
                     <div className={`${styles.stageRow} ${styles.stageSuccess}`}>
                       <CheckCircle2 size={16} />
-                      <span>OCR completed</span>
+                      <span>OCR recognition completed</span>
                     </div>
-                    <div className={`${styles.stageRow} ${styles.stageSuccess}`}>
-                      <CheckCircle2 size={16} />
-                      <span>Extraction completed</span>
-                    </div>
+
+                    {item.status !== 'PROCESSING' && (
+                      <div className={`${styles.stageRow} ${styles.stageSuccess}`}>
+                        <CheckCircle2 size={16} />
+                        <span>Extraction completed</span>
+                      </div>
+                    )}
+
+                    {item.status === 'PROCESSING' && item.rawOcrText && (
+                      <div className={styles.stageRow} style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                        <span>Text recognized ({item.rawOcrText.length} characters)</span>
+                      </div>
+                    )}
 
                     {item.status === 'READY' && (
                       <div className={`${styles.stageRow} ${styles.stageSuccess}`}>
@@ -144,21 +153,27 @@ export function ProcessingShipmentList({ items }: ProcessingShipmentListProps) {
                 )}
 
                 {/* Issues details if ISSUE status */}
-                {item.status === 'ISSUE' && item.issues && Object.keys(item.issues).length > 0 && (
+                {item.status === 'ISSUE' && item.issues && (
                   <div className={styles.issuesBox}>
                     <span>Flagged data discrepancies:</span>
                     <ul className={styles.issuesList}>
-                      {Object.entries(item.issues).map(([field, reason]) => (
-                        <li key={field}>
-                          <strong>{field}</strong>: {reason}
-                        </li>
-                      ))}
+                      {Array.isArray(item.issues)
+                        ? item.issues.map((iss, idx) => (
+                            <li key={idx}>
+                              <strong>{iss.field}</strong>: {iss.message}
+                            </li>
+                          ))
+                        : Object.entries(item.issues).map(([field, reason]) => (
+                            <li key={field}>
+                              <strong>{field}</strong>: {String(reason)}
+                            </li>
+                          ))}
                     </ul>
                   </div>
                 )}
 
-                {/* Preview of extracted fields if READY */}
-                {item.status === 'READY' && item.extractedFields && (
+                {/* Preview of extracted fields if available */}
+                {(item.status === 'READY' || item.status === 'ISSUE') && item.extractedFields && (
                   <div className={styles.extractedDataPreview}>
                     {item.extractedFields.name && (
                       <span className={styles.extractedItem}>

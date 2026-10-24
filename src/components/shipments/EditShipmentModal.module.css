@@ -1,3 +1,56 @@
+.modalGrid {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .modalGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.imageColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  background: var(--bg-surface-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 0.875rem;
+  position: sticky;
+  top: 0;
+}
+
+.imageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+}
+
+.imageTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.imageFilename {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.formColumn {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .form {
   display: flex;
   flex-direction: column;

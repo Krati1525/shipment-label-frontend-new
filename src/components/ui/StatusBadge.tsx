@@ -11,7 +11,6 @@ export interface StatusBadgeProps {
 
 const STATUS_LABELS: Record<ShipmentStatus, string> = {
   PROCESSING: 'Processing',
-  PAUSED: 'Paused',
   ISSUE: 'Issue',
   READY: 'Ready',
   SHIPPED: 'Shipped',
